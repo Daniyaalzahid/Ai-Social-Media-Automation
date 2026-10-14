@@ -7,6 +7,8 @@ import { migrateDatabase, readMigrations } from '../../src/server/db/migrations'
 import { seedCatalog } from '../../src/server/db/seeds';
 import { assertDestructiveTestDatabase } from '../../src/server/db/test-guard';
 import type { DatabaseSchema } from '../../src/server/db/schema';
+import { Migrator, type Migration } from 'kysely/migration';
+import { randomBytes } from 'node:crypto';
 
 const dropOrder = ['audit_logs', 'security_events', 'auth_challenges', 'sessions', 'mfa_recovery_codes', 'mfa_methods',
   'password_reset_tokens', 'invitations', 'installation_state', 'user_roles', 'role_permissions', 'permissions', 'roles', 'users', 'auth_rate_limits',
@@ -22,6 +24,35 @@ async function clearScratch(db: Kysely<DatabaseSchema>, source: Record<string, s
 }
 
 describe('isolated clean migration and recovery', () => {
+  it('upgrades the actual Phase 2A SQL/journal to 0003, preserves old enum rows and rejects checksum tampering', async () => {
+    const { source, handle } = scratch('bsa_test_clean');
+    const db = handle.db;
+    try {
+      await clearScratch(db, source);
+      await sql`CREATE TABLE schema_migration_checksums (name varchar(150) PRIMARY KEY, sha256 char(64) NOT NULL, state enum('applying','applied') NOT NULL) ENGINE=InnoDB`.execute(db);
+      const phase2a = (await readMigrations()).slice(0, 3);
+      const migrations: Record<string, Migration> = Object.fromEntries(phase2a.map((entry) => [entry.name, { up: async (connection) => {
+        await sql`INSERT INTO schema_migration_checksums (name,sha256,state) VALUES (${entry.name},${entry.sha256},'applying')`.execute(connection);
+        for (const statement of entry.statements) await sql.raw(statement).execute(connection);
+        await sql`UPDATE schema_migration_checksums SET state='applied' WHERE name=${entry.name}`.execute(connection);
+      } }]));
+      const result = await new Migrator({ db, provider: { getMigrations: async () => migrations } }).migrateToLatest();
+      expect(result.error === undefined).toBe(true);
+      await seedCatalog(db);
+      const userId = randomUUID();
+      await db.insertInto('users').values({ id: userId, email_normalized: `${userId}@example.test`, display_name: 'Synthetic upgrade', status: 'invited', password_hash: null, password_changed_at: null, last_login_at: null }).execute();
+      const oldProof = randomUUID();
+      await db.insertInto('auth_challenges').values({ id: oldProof, user_id: userId, purpose: 'login_mfa', token_hash: randomBytes(32), auth_version: 1, action_code: null, consumed_at: null, revoked_at: null,
+        created_at: new Date(), expires_at: new Date(Date.now() + 300000) }).execute();
+      await migrateDatabase(db); await migrateDatabase(db);
+      expect((await db.selectFrom('auth_challenges').select('purpose').where('id', '=', oldProof).executeTakeFirstOrThrow()).purpose).toBe('login_mfa');
+      await db.insertInto('auth_challenges').values({ id: randomUUID(), user_id: userId, purpose: 'password_verified', token_hash: randomBytes(32), auth_version: 1, action_code: 'PASSWORD_VERIFIED', consumed_at: null, revoked_at: null,
+        created_at: new Date(), expires_at: new Date(Date.now() + 300000) }).execute();
+      expect((await sql`SELECT name FROM schema_migration_checksums`.execute(db)).rows).toHaveLength(4);
+      await sql`UPDATE schema_migration_checksums SET sha256=${'0'.repeat(64)} WHERE name='0003_password_verified_challenges.sql'`.execute(db);
+      await expect(migrateDatabase(db)).rejects.toThrow('checksum mismatch');
+    } finally { await clearScratch(db, source); await migrateDatabase(db); await seedCatalog(db); await handle.close(); }
+  });
   it('migrates a completely clean database and permits a repeat without changes', async () => {
     const { source, handle } = scratch('bsa_test_clean');
     try {

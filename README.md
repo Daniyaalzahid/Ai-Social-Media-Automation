@@ -14,13 +14,15 @@ Deployment:
 - MySQL
 - OpenRouter
 
-## Current scope — Phase 2A security data foundation
+## Current scope — Phase 2B password-stage security
 
 The full source-of-truth specification is [the master PRD](docs/Bismillah_Social_AI_Master_PRD.md).
-Phases 0 and 1 are approved and closed. Phase 2A adds isolated MySQL configuration,
-security tables/migrations and canonical permission seeds. The approved UI remains unchanged.
-There is no authentication flow, bootstrap command, MFA flow, provider integration,
-upload, publishing or scheduler. Phase 2B and later work is not authorized.
+Phases 0, 1 and 2A are approved and closed. Phase 2B adds bounded Argon2id password
+services, restricted password-stage challenges, database rate controls, typed audit/security
+events and interactive CLI Owner bootstrap. The approved UI remains unchanged.
+There is no browser authentication, workspace session, MFA flow, provider integration,
+upload, publishing or scheduler. Phase 2C and later work is not authorized.
+See [Phase 2B security decisions and bootstrap boundaries](docs/architecture/phase-2b.md).
 
 Use Node **24.21.0** with bundled npm **11.19.0** (`.nvmrc` / `.node-version`).
 Use an existing version manager where available; no global/root services are required.

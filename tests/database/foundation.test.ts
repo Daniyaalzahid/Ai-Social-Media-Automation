@@ -57,7 +57,7 @@ describe('real MySQL security foundation', () => {
     await migrateDatabase(db);
     expect(await db.selectFrom('installation_state').selectAll().execute()).toHaveLength(1);
     const ledger = await sql<{ state: string }>`SELECT state FROM schema_migration_checksums`.execute(db);
-    expect(ledger.rows).toHaveLength(3);
+    expect(ledger.rows).toHaveLength(4);
     expect(ledger.rows.every((row) => row.state === 'applied')).toBe(true);
   });
   it('sets the server connection timezone to UTC for SQL defaults', async () => {

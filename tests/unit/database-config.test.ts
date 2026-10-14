@@ -76,6 +76,21 @@ describe('database configuration isolation', () => {
     ]) expect(() => assertRestrictedTestGrants([...allowed, grant], 'bsa_test_unit')).toThrow('unrestricted');
     expect(() => assertRestrictedTestGrants(allowed, 'bsa_test_other')).toThrow('missing');
   });
+  it('selects bootstrap migration credentials only for the intended database', () => {
+    expect(resolveDatabaseConfiguration(source(), 'bootstrap').user).toBe('bsa_test_migration');
+    const runtime = new URL(source().TEST_DATABASE_URL);
+    runtime.hostname = 'database.example.test'; runtime.pathname = '/deployment_fixture'; runtime.username = 'deployment_runtime';
+    const admin = new URL(runtime); admin.username = 'deployment_admin';
+    const env = { APP_ENV: 'production', NODE_ENV: 'production', DATABASE_URL: runtime.href, DATABASE_MIGRATION_URL: admin.href };
+    const configuration = resolveDatabaseConfiguration(env, 'bootstrap');
+    expect(configuration.user).toBe('deployment_admin');
+    expect(configuration.tls).toBe(true);
+    expect(() => resolveDatabaseConfiguration({ ...env, DATABASE_MIGRATION_URL: runtime.href }, 'bootstrap')).toThrow();
+    const mismatch = new URL(admin); mismatch.pathname = '/different_fixture';
+    expect(() => resolveDatabaseConfiguration({ ...env, DATABASE_MIGRATION_URL: mismatch.href }, 'bootstrap')).toThrow();
+    expect(() => resolveDatabaseConfiguration({ ...env, APP_ENV: undefined }, 'bootstrap')).toThrow();
+    expect(() => resolveDatabaseConfiguration({ ...env, DATABASE_MIGRATION_URL: undefined }, 'bootstrap')).toThrow();
+  });
   it('rejects a consistently production mode before any database access', () => {
     expect(() => resolveDatabaseConfiguration({ ...source(), APP_ENV: 'production', NODE_ENV: 'production' }, 'destructive-test')).toThrow();
   });
@@ -94,7 +109,7 @@ describe('security catalog and reviewed migration inputs', () => {
   });
   it('verifies migration file checksums and rejects missing manifest entries', async () => {
     const entries = await readMigrations();
-    expect(entries.map((entry) => entry.name)).toEqual(['0000_phase2a_security_foundation.sql', '0001_security_invariants.sql', '0002_review_integrity.sql']);
+    expect(entries.map((entry) => entry.name)).toEqual(['0000_phase2a_security_foundation.sql', '0001_security_invariants.sql', '0002_review_integrity.sql', '0003_password_verified_challenges.sql']);
     expect(entries.every((entry) => entry.statements.length > 0)).toBe(true);
   });
 });

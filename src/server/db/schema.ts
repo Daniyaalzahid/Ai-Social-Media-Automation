@@ -26,7 +26,7 @@ export interface AuthChallengesTable {
   id: string;
   user_id: string;
   token_hash: Buffer;
-  purpose: 'login_mfa' | 'mfa_enrollment' | 'mfa_recovery' | 'reauthentication' | 'password_reset';
+  purpose: 'login_mfa' | 'mfa_enrollment' | 'mfa_recovery' | 'reauthentication' | 'password_reset' | 'password_verified';
   auth_version: number;
   action_code: string | null;
   attempts: DefaultNumber;

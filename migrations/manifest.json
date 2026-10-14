@@ -10,5 +10,9 @@
   {
     "name": "0002_review_integrity.sql",
     "sha256": "429a62df6842fd1bb0261baaf51b6121305cc1b3576682f51b9b5dce87f5a811"
+  },
+  {
+    "name": "0003_password_verified_challenges.sql",
+    "sha256": "978abcf2a7456c1259c5208442eebdeb9e78233b1d692c40f2ef2e2cded7a401"
   }
 ]

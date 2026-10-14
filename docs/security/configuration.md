@@ -21,12 +21,12 @@ TOKEN_ENCRYPTION_KEY: canonical base64 encoding of exactly 32 random bytes; sepa
 MFA_ENCRYPTION_KEY and SECURITY_EVENT_HMAC_KEY: independently generated canonical base64 encodings of 32 random bytes. Equal bindings among these, SESSION_SECRET and TOKEN_ENCRYPTION_KEY are rejected; operators must also generate independent high-entropy values.
 MFA_ENCRYPTION_KEY_ID: optional nonsecret rotation identifier. No encryption or MFA flow is implemented yet.
 DEV_DATABASE_URL/DEV_DATABASE_MIGRATION_URL and TEST_DATABASE_URL/TEST_DATABASE_MIGRATION_URL: nonproduction credentials with distinct runtime/migration identities. Local loopback only, bsa_dev_/bsa_test_ database and user namespaces, and no query-string overrides. A migration identity must end in _migration; runtime in _runtime.
-DATABASE_MIGRATION_URL: reserved production deployment credential, never used by Phase 2A commands. Production migrations are explicitly rejected.
+DATABASE_MIGRATION_URL: reserved production administrative credential. Production migrations remain explicitly rejected. The Phase 2B interactive bootstrap CLI can intentionally select this separate identity only with explicit production modes and a matching database/host; no production execution is authorized during development.
 DB_POOL_MAX: 1–10, default 2 per process. DB_POOL_ACQUIRE_TIMEOUT_MS and DB_CONNECT_TIMEOUT_MS: 100–10000, default 5000. Queue length is bounded at 20; late acquisitions are released.
 DB_CA_CERT_PATH: optional private server CA path; production DB connections require verified TLS certificate chain and hostname, TLS 1.2+, and a DNS hostname. Do not weaken verification to address a hosting mismatch. SQL sessions enforce UTC and STRICT_ALL_TABLES.
 TEST_DATABASE_RESET_ALLOWED: test-only explicit destructive-operation acknowledgement. This does not override host/name/user/environment guards or database grants.
 
-All provider settings remain optional during Phase 2A and production core validation:
+All provider settings remain optional during Phase 2B and production core validation:
 OPENROUTER_API_KEY, OPENROUTER_MODEL;
 META_APP_ID, META_APP_SECRET;
 TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET;
@@ -42,4 +42,6 @@ Never use NEXT_PUBLIC_ for credentials. Validation rejects credential-like publi
 
 `npm run audit` checks all production and development dependencies and fails for any reported advisory severity. These checks depend on known patterns/advisories; passing is not a guarantee that all secrets or vulnerabilities are absent.
 
-No active authentication or protected dashboard is claimed in Phase 2A. Database grant restrictions and schema constraints do not replace later password/MFA/session/CSRF/object-authorization implementations. See the Phase 2A architecture for schema, grant and recovery limitations.
+Phase 2B adds no environment names. SECURITY_EVENT_HMAC_KEY is required when the private password-stage service is initialized, not during UI import/build or database-only commands. No session/MFA feature uses its reserved keys yet. CLI bootstrap uses interactive password input, never a password environment variable.
+
+No browser authentication or protected dashboard is claimed in Phase 2B. Database grant restrictions and schema constraints do not replace later MFA/session/CSRF/object-authorization implementations. See the Phase 2A architecture for schema/grant limitations and Phase 2B architecture for restricted authentication and CLI boundaries.

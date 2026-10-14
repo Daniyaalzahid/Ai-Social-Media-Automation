@@ -3,7 +3,7 @@ import type { Kysely } from 'kysely';
 import { PERMISSION_CODES, ROLE_CODES, ROLE_PERMISSIONS } from './catalog.ts';
 import type { DatabaseSchema } from './schema.ts';
 
-function catalogId(kind: string, code: string): string {
+export function canonicalCatalogId(kind: string, code: string): string {
   const hex = createHash('sha256').update(`bismillah-social-ai/catalog/v1/${kind}/${code}`).digest('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
@@ -13,21 +13,21 @@ export async function seedCatalog(db: Kysely<DatabaseSchema>): Promise<void> {
   await db.transaction().execute(async (transaction) => {
     for (const code of ROLE_CODES) {
       const label = code === 'OWNER' ? 'Owner / Super Admin' : code.toLowerCase().replaceAll('_', ' ');
-      const id = catalogId('role', code);
+      const id = canonicalCatalogId('role', code);
       const existing = await transaction.selectFrom('roles').select(['id', 'code']).where((expression) => expression.or([expression('code', '=', code), expression('id', '=', id)])).execute();
       if (existing.some((row) => row.id !== id || row.code !== code)) throw new Error('Canonical role catalog conflict');
       await transaction.insertInto('roles').values({ id, code, label }).onDuplicateKeyUpdate({ label }).execute();
     }
     for (const code of PERMISSION_CODES) {
-      const id = catalogId('permission', code);
+      const id = canonicalCatalogId('permission', code);
       const existing = await transaction.selectFrom('permissions').select(['id', 'code']).where((expression) => expression.or([expression('code', '=', code), expression('id', '=', id)])).execute();
       if (existing.some((row) => row.id !== id || row.code !== code)) throw new Error('Canonical permission catalog conflict');
       await transaction.insertInto('permissions').values({ id, code }).onDuplicateKeyUpdate({ code }).execute();
     }
     for (const code of ROLE_CODES) {
-      const roleId = catalogId('role', code);
+      const roleId = canonicalCatalogId('role', code);
       await transaction.deleteFrom('role_permissions').where('role_id', '=', roleId).execute();
-      await transaction.insertInto('role_permissions').values(ROLE_PERMISSIONS[code].map((permission) => ({ role_id: roleId, permission_id: catalogId('permission', permission) }))).execute();
+      await transaction.insertInto('role_permissions').values(ROLE_PERMISSIONS[code].map((permission) => ({ role_id: roleId, permission_id: canonicalCatalogId('permission', permission) }))).execute();
     }
   });
 }

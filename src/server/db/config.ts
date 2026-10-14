@@ -1,7 +1,7 @@
 import { EnvironmentValidationError, type EnvironmentSource } from '../config/schema.ts';
 import { isIP } from 'node:net';
 
-export type DatabasePurpose = 'runtime' | 'migration' | 'destructive-test';
+export type DatabasePurpose = 'runtime' | 'migration' | 'destructive-test' | 'bootstrap';
 export type DatabaseConfiguration = Readonly<{
   mode: 'development' | 'test' | 'production'; host: string; port: number; database: string;
   user: string; password: string; connectionLimit: number; acquireTimeout: number; connectTimeout: number;
@@ -28,12 +28,13 @@ export function resolveDatabaseConfiguration(source: EnvironmentSource, purpose:
   if (mode === 'production' && (source.DEV_DATABASE_URL || source.TEST_DATABASE_URL || source.DEV_DATABASE_MIGRATION_URL || source.TEST_DATABASE_MIGRATION_URL || source.TEST_DATABASE_RESET_ALLOWED)) {
     throw new EnvironmentValidationError(['database environment isolation']);
   }
-  // Production deployment/migration authorization is deliberately absent in Phase 2A.
-  if (mode === 'production' && purpose !== 'runtime') throw new EnvironmentValidationError(['production migrations not authorized']);
+  // Production migrations/tests remain forbidden. Only the explicit administrative
+  // bootstrap CLI may intentionally select the separate production admin identity.
+  if (mode === 'production' && !['runtime', 'bootstrap'].includes(purpose)) throw new EnvironmentValidationError(['production migrations not authorized']);
   if (purpose === 'destructive-test' && (mode !== 'test' || source.TEST_DATABASE_RESET_ALLOWED !== '1')) {
     throw new EnvironmentValidationError(['APP_ENV', 'TEST_DATABASE_RESET_ALLOWED']);
   }
-  const key = mode === 'production' ? 'DATABASE_URL' : `${mode === 'test' ? 'TEST' : 'DEV'}_DATABASE_${purpose === 'runtime' ? 'URL' : 'MIGRATION_URL'}`;
+  const key = mode === 'production' ? (purpose === 'bootstrap' ? 'DATABASE_MIGRATION_URL' : 'DATABASE_URL') : `${mode === 'test' ? 'TEST' : 'DEV'}_DATABASE_${purpose === 'runtime' ? 'URL' : 'MIGRATION_URL'}`;
   let url: URL;
   try { url = new URL(source[key] ?? ''); } catch { throw new EnvironmentValidationError([key]); }
   let user: string, password: string, database: string;
@@ -60,6 +61,13 @@ export function resolveDatabaseConfiguration(source: EnvironmentSource, purpose:
   }
   // mysql2's explicit certificate identity check requires a DNS hostname.
   if (mode === 'production' && isIP(host)) throw new EnvironmentValidationError([key, 'verified database hostname required']);
+  if (mode === 'production' && purpose === 'bootstrap') {
+    if (source.APP_ENV !== 'production' || source.NODE_ENV !== 'production') throw new EnvironmentValidationError(['APP_ENV', 'NODE_ENV']);
+    let runtimeUrl: URL;
+    try { runtimeUrl = new URL(source.DATABASE_URL ?? ''); } catch { throw new EnvironmentValidationError(['DATABASE_URL']); }
+    if (runtimeUrl.protocol !== 'mysql:' || runtimeUrl.hostname !== url.hostname || (runtimeUrl.port || '3306') !== (url.port || '3306')
+      || runtimeUrl.pathname !== url.pathname || runtimeUrl.username === url.username) throw new EnvironmentValidationError(['separate matching bootstrap database identity required']);
+  }
   const port = Number(url.port || 3306);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new EnvironmentValidationError([key]);
   return Object.freeze({
