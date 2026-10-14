@@ -34,7 +34,7 @@ describe('workspace shell and presentation pages', () => {
     const user = userEvent.setup();
     render(<AppShell><h1>Preview</h1></AppShell>);
     await user.click(screen.getByRole('button', { name: 'Open navigation' }));
-    const dialog = screen.getByRole('dialog', { name: 'Your workspace' });
+    const dialog = screen.getByRole('dialog', { name: 'Bismillah Social AI' });
     expect(within(dialog).getAllByRole('link')).toHaveLength(13);
     await user.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

@@ -4,7 +4,7 @@ test('desktop shell, collapse, routes, and safe preview form', async ({ page }) 
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/overview');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Good things are in the works.');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Content overview');
   await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link')).toHaveCount(12);
   await page.getByRole('button', { name: 'Collapse sidebar' }).click();
   await expect(page.getByRole('link', { name: 'Brand Brain', exact: true })).toBeVisible();
@@ -24,7 +24,7 @@ test('mobile drawer traps focus, closes on Escape, restores focus, and navigates
   await page.goto('/overview');
   const trigger = page.getByRole('button', { name: 'Open navigation' });
   await trigger.click();
-  const dialog = page.getByRole('dialog', { name: 'Your workspace' });
+  const dialog = page.getByRole('dialog', { name: 'Bismillah Social AI' });
   await expect(dialog).toBeVisible();
   await page.keyboard.press('Shift+Tab');
   expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
@@ -72,7 +72,7 @@ test('all navigation placeholders and error previews render without live service
 
 test('responsive surfaces fit narrow/mobile/tablet/desktop widths and respect reduced motion', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  for (const width of [320, 390, 768, 1024, 1440]) {
+  for (const width of [320, 375, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     for (const route of ['/', '/login', '/overview', '/ui-kit', '/offline']) {
       await page.goto(route);
@@ -85,4 +85,30 @@ test('responsive surfaces fit narrow/mobile/tablet/desktop widths and respect re
   await page.goto('/ui-kit');
   await page.getByRole('tab', { name: 'Loading', exact: true }).click();
   expect(await page.locator('.loading-indicator').evaluate((element) => getComputedStyle(element).animationName)).toBe('none');
+});
+
+test('dashboard primary action and drawer controls stay usable at review widths', async ({ page }) => {
+  for (const width of [320, 375, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/overview');
+    const primary = page.getByRole('link', { name: 'Create a post', exact: true });
+    await expect(primary).toBeVisible();
+    await expect(primary).toHaveClass(/button--primary/);
+    await expect(page.locator('main a.button--primary')).toHaveCount(1);
+    await primary.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(primary).toBeFocused();
+    const box = await primary.boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (width < 960) {
+      await page.getByRole('button', { name: 'Open navigation' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Bismillah Social AI' });
+      const close = dialog.getByRole('button', { name: 'Close dialog' });
+      await expect(close).toBeInViewport();
+      await close.click();
+      await expect(dialog).not.toBeVisible();
+    }
+  }
 });

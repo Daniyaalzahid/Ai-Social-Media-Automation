@@ -42,6 +42,7 @@ svg { flex-shrink: 0; }
 .badge--warning { color: var(--warning); background: var(--warning-soft); }
 .badge--danger { color: var(--danger); background: var(--danger-soft); }
 .badge--blue { color: var(--accent-blue); background: var(--blue-soft); }
+.status-badge svg { width: 12px; height: 12px; }
 .field { display: grid; gap: var(--space-1); }
 .field > label { font-size: var(--font-sm); font-weight: 600; }
 .input { width: 100%; min-width: 0; min-height: 48px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--control-border); border-radius: var(--radius-control); color: var(--text); }
@@ -101,6 +102,22 @@ svg { flex-shrink: 0; }
 .sidebar-footer { margin-top: auto; padding-top: var(--space-4); display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
 .sidebar-footer > a { width: 100%; }
 .sidebar-version { font-size: var(--font-xs); color: var(--muted); }
+.nav-link--development { font-size: var(--font-xs); }
+.development-label { margin-left: var(--space-half); font-size: var(--font-xs); color: var(--muted); }
+.mobile-product-name { display: none; }
+.dashboard-overview .page-header { margin-bottom: var(--space-2); }
+.dashboard-overview .page-header .eyebrow { margin-bottom: var(--space-1); }
+.dashboard-overview .page-description { margin-top: var(--space-1); }
+.dashboard-overview .sample-note { margin-bottom: var(--space-2); }
+.dashboard-overview .metric-card { padding-block: 20px; }
+.dashboard-overview .metric-value { margin: 12px 0 8px; }
+.dashboard-overview .metrics-grid { margin-bottom: 20px; }
+.dashboard-overview .overview-grid, .dashboard-overview .overview-main, .dashboard-overview .overview-side { gap: 20px; }
+.dashboard-overview .section-header { padding-block: var(--space-2); }
+.dashboard-overview .post-row { padding-block: var(--space-2); }
+.dashboard-overview .post-row:first-child { padding-top: var(--space-1); }
+.dashboard-overview .ai-card h2 { font-size: var(--font-xl); }
+.dashboard-overview .usage-caption { margin-top: var(--space-3); }
 .app-shell--collapsed .sidebar { padding-inline: 12px; }
 .app-shell--collapsed .sidebar-brand { padding-inline: 8px; }
 .app-shell--collapsed .nav-link { justify-content: center; padding: 10px; }
@@ -251,6 +268,7 @@ progress::-moz-progress-bar { background: var(--brand-primary); }
 .ui-kit-wide { grid-column: 1 / -1; }
 
 @media (max-width: 1279px) {
+  .dashboard-overview .metric-card { padding-block: var(--space-2); }
   .header-search { display: none; }
   .overview-grid { grid-template-columns: minmax(0, 1fr); }
   .overview-side { grid-template-columns: 1fr 1fr; }
@@ -279,8 +297,9 @@ progress::-moz-progress-bar { background: var(--brand-primary); }
   .topbar { height: 72px; padding-inline: var(--space-2); }
   .topbar-end { gap: var(--space-1); }
   .timezone, .breadcrumb, .user-avatar { display: none; }
-  .topbar-start::after { content: 'bismillah / social ai'; font-size: var(--font-xs); font-weight: 600; letter-spacing: -.02em; }
+  .mobile-product-name { display: inline; font-size: var(--font-xs); font-weight: 600; letter-spacing: -.02em; }
   .page-container { padding: var(--space-4) var(--space-2); }
+  .page-container:has(.dashboard-overview) { padding-top: var(--space-3); }
   .page-header { align-items: start; flex-direction: column; }
   .page-header-action { width: 100%; }
   .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }

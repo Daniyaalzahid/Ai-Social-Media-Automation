@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { Badge } from '../../src/components/ui/badge';
+import { Badge, StatusBadge } from '../../src/components/ui/badge';
 import { Button, IconButton } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
 import { Checkbox, Input, Select, Textarea } from '../../src/components/ui/fields';
@@ -13,6 +13,12 @@ import { EmptyState, ErrorState, LoadingState } from '../../src/components/ui/st
 import { PageHeader } from '../../src/components/ui/page-header';
 
 describe('accessible UI building blocks', () => {
+  it.each(['Draft', 'In review', 'Approved', 'Scheduled', 'Published', 'Needs attention', 'Failed'] as const)('renders %s with text and a decorative status symbol', (status) => {
+    render(<StatusBadge status={status} />);
+    const badge = screen.getByText(status);
+    expect(badge).toHaveClass('status-badge');
+    expect(badge.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  });
   it('renders semantic buttons, a named icon control, card, and readable badge', () => {
     render(<Card aria-label="Preview card"><Button disabled>Unavailable</Button><IconButton label="Open menu">+</IconButton><Badge tone="success">Approved</Badge></Card>);
     expect(screen.getByRole('button', { name: 'Unavailable' })).toBeDisabled();
