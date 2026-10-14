@@ -27,6 +27,7 @@
       }
     ],
     "allowJs": false,
+    "allowImportingTsExtensions": true,
     "incremental": true
   },
   "include": [

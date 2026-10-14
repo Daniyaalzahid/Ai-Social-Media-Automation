@@ -1,4 +1,4 @@
-# AI Social Media Automation
+# Bismillah Social AI
 
 AI-powered social media content generation, scheduling and publishing platform.
 
@@ -14,12 +14,13 @@ Deployment:
 - MySQL
 - OpenRouter
 
-## UI foundation — Phase 1 only
+## Current scope — Phase 2A security data foundation
 
 The full source-of-truth specification is [the master PRD](docs/Bismillah_Social_AI_Master_PRD.md).
-Phase 0 is approved and closed. Phase 1 adds the UI shell, design system, static demo dashboard,
-and disabled sign-in preview. Phase 2 and later phases are not authorized.
-There is no database schema, authentication, provider integration, upload, publishing, or scheduler.
+Phases 0 and 1 are approved and closed. Phase 2A adds isolated MySQL configuration,
+security tables/migrations and canonical permission seeds. The approved UI remains unchanged.
+There is no authentication flow, bootstrap command, MFA flow, provider integration,
+upload, publishing or scheduler. Phase 2B and later work is not authorized.
 
 Use Node **24.21.0** with bundled npm **11.19.0** (`.nvmrc` / `.node-version`).
 Use an existing version manager where available; no global/root services are required.
@@ -34,7 +35,9 @@ npm run audit
 npm run build
 ```
 
-All checks and the UI build work without database or provider credentials. Do not supply production secrets.
+The checks above and UI build work without database or provider credentials. Real database
+integration tests run separately with `npm run test:db` and require isolated local MySQL.
+Do not supply production secrets. See [Phase 2A setup and migration recovery](docs/architecture/phase-2a.md).
 On the cloud machine, set `NPM_CONFIG_CACHE=/workspace/.npm-cache` if the default home cache is unwritable.
 The prepared cloud toolchain is `/workspace/.tools/node-v24.21.0-linux-x64/bin`; prepend it to PATH for this instance.
 Run `npm run dev` to inspect the UI, or `npm run build` followed by `npm run start` to inspect a production build.

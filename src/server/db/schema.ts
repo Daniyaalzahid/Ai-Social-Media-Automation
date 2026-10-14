@@ -1,0 +1,185 @@
+import type { ColumnType } from 'kysely';
+import type { Buffer } from 'node:buffer';
+
+// SQL migrations are authoritative. These types describe the persisted records;
+// they are not user-input validators or permission checks.
+type DateValue = ColumnType<Date, Date | string, Date | string>;
+type DefaultDate = ColumnType<Date, Date | string | undefined, Date | string>;
+type DefaultNumber = ColumnType<number, number | undefined, number>;
+export type SafeEventMetadata = { reasonCode?: string; changedFields?: string[]; roleCode?: string; selfApproval?: boolean; count?: number };
+type EventJson = ColumnType<SafeEventMetadata | null, string | null | undefined, string | null>;
+
+export interface AuditLogsTable {
+  id: string;
+  actor_user_id: string | null;
+  target_user_id: string | null;
+  session_id: string | null;
+  action: string;
+  outcome: 'success' | 'failure' | 'denied';
+  correlation_id: string;
+  metadata_safe_json: EventJson;
+  ip_hash: Buffer | null;
+  created_at: DefaultDate;
+}
+
+export interface AuthChallengesTable {
+  id: string;
+  user_id: string;
+  token_hash: Buffer;
+  purpose: 'login_mfa' | 'mfa_enrollment' | 'mfa_recovery' | 'reauthentication' | 'password_reset';
+  auth_version: number;
+  action_code: string | null;
+  attempts: DefaultNumber;
+  created_at: DefaultDate;
+  expires_at: DateValue;
+  consumed_at: DateValue | null;
+  revoked_at: DateValue | null;
+}
+
+export interface AuthRateLimitsTable {
+  scope: string;
+  subject_hash: Buffer;
+  window_started_at: DateValue;
+  attempts: DefaultNumber;
+  blocked_until: DateValue | null;
+  expires_at: DateValue;
+}
+
+export interface InstallationStateTable {
+  id: number;
+  bootstrap_consumed_at: DateValue | null;
+  initial_owner_id: string | null;
+  created_at: DefaultDate;
+}
+
+export interface InvitationsTable {
+  id: string;
+  user_id: string;
+  issued_by: string;
+  token_hash: Buffer;
+  created_at: DefaultDate;
+  expires_at: DateValue;
+  accepted_at: DateValue | null;
+  revoked_at: DateValue | null;
+}
+
+export interface MfaMethodsTable {
+  id: string;
+  user_id: string;
+  type: 'totp';
+  state: 'pending' | 'active';
+  seed_ciphertext: Buffer;
+  iv: Buffer;
+  tag: Buffer;
+  key_id: string;
+  created_at: DefaultDate;
+  enrollment_expires_at: DateValue | null;
+  confirmed_at: DateValue | null;
+  last_accepted_step: number | null;
+}
+
+export interface MfaRecoveryCodesTable {
+  id: string;
+  method_id: string;
+  batch_id: string;
+  code_hash: Buffer;
+  created_at: DefaultDate;
+  used_at: DateValue | null;
+  revoked_at: DateValue | null;
+}
+
+export interface PasswordResetTokensTable {
+  id: string;
+  user_id: string;
+  issued_by: string;
+  token_hash: Buffer;
+  created_at: DefaultDate;
+  expires_at: DateValue;
+  consumed_at: DateValue | null;
+  revoked_at: DateValue | null;
+}
+
+export interface PermissionsTable {
+  id: string;
+  code: string;
+}
+
+export interface RolePermissionsTable {
+  role_id: string;
+  permission_id: string;
+}
+
+export interface RolesTable {
+  id: string;
+  code: string;
+  label: string;
+}
+
+export interface SecurityEventsTable {
+  id: string;
+  user_id: string | null;
+  type: string;
+  severity: 'info' | 'warning' | 'critical';
+  outcome: 'success' | 'failure' | 'denied';
+  correlation_id: string;
+  metadata_safe_json: EventJson;
+  ip_hash: Buffer | null;
+  created_at: DefaultDate;
+}
+
+export interface SessionsTable {
+  id: string;
+  user_id: string;
+  token_hash: Buffer;
+  auth_version: number;
+  created_at: DefaultDate;
+  last_activity_at: DateValue;
+  idle_expires_at: DateValue;
+  absolute_expires_at: DateValue;
+  authenticated_at: DateValue;
+  mfa_verified_at: DateValue | null;
+  reauthenticated_at: DateValue | null;
+  revoked_at: DateValue | null;
+  revocation_reason: string | null;
+  ip_hash: Buffer | null;
+  device_class: string | null;
+}
+
+export interface UserRolesTable {
+  user_id: string;
+  role_id: string;
+  assigned_by: string | null;
+  created_at: DefaultDate;
+}
+
+export interface UsersTable {
+  id: string;
+  email_normalized: string;
+  display_name: string;
+  // NULL is valid only for invited placeholders; SQL enforces all other states.
+  password_hash: string | null;
+  status: 'invited' | 'pending_mfa' | 'active' | 'disabled';
+  auth_version: DefaultNumber;
+  password_changed_at: DateValue | null;
+  last_login_at: DateValue | null;
+  created_at: DefaultDate;
+  updated_at: DefaultDate;
+}
+
+export interface DatabaseSchema {
+  audit_logs: AuditLogsTable;
+  auth_challenges: AuthChallengesTable;
+  auth_rate_limits: AuthRateLimitsTable;
+  installation_state: InstallationStateTable;
+  invitations: InvitationsTable;
+  mfa_methods: MfaMethodsTable;
+  mfa_recovery_codes: MfaRecoveryCodesTable;
+  password_reset_tokens: PasswordResetTokensTable;
+  permissions: PermissionsTable;
+  role_permissions: RolePermissionsTable;
+  roles: RolesTable;
+  security_events: SecurityEventsTable;
+  sessions: SessionsTable;
+  user_roles: UserRolesTable;
+  users: UsersTable;
+}

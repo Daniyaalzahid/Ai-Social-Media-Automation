@@ -1,0 +1,14 @@
+[
+  {
+    "name": "0000_phase2a_security_foundation.sql",
+    "sha256": "f1bd8bb9ec302a9e67c8a25d70dde8f7707fdbdfbe3e0d4e263ef88f4b33f799"
+  },
+  {
+    "name": "0001_security_invariants.sql",
+    "sha256": "6e3725de5e3eb5af2141e0e6d41e9269f607d8610c6c7e59153e38d4fec35e02"
+  },
+  {
+    "name": "0002_review_integrity.sql",
+    "sha256": "429a62df6842fd1bb0261baaf51b6121305cc1b3576682f51b9b5dce87f5a811"
+  }
+]

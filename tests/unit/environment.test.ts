@@ -5,10 +5,12 @@ import { EnvironmentValidationError, requireProviderConfiguration, validateEnvir
 function production() {
   return {
     NODE_ENV: 'production', APP_ENV: 'production', APP_URL: 'https://social.example.test',
-    DATABASE_URL: new URL(`mysql://test_user:${'fixture'.repeat(6)}@127.0.0.1/test_only`).href,
+    DATABASE_URL: new URL(`mysql://production_fixture:${'fixture'.repeat(6)}@127.0.0.1/production_fixture`).href,
     SESSION_SECRET: 'session-fixture-'.repeat(3),
     CRON_SECRET: 'cron-fixture-'.repeat(3),
     TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
+    MFA_ENCRYPTION_KEY: Buffer.alloc(32, 8).toString('base64'),
+    SECURITY_EVENT_HMAC_KEY: Buffer.alloc(32, 9).toString('base64'),
   };
 }
 
@@ -32,10 +34,25 @@ describe('environment validation', () => {
     expect(result.GOOGLE_CLIENT_SECRET).toBeUndefined();
     expect(() => validateEnvironment({ NODE_ENV: 'production' })).toThrow(EnvironmentValidationError);
   });
-  it.each(['APP_URL', 'DATABASE_URL', 'SESSION_SECRET', 'TOKEN_ENCRYPTION_KEY', 'CRON_SECRET'])('rejects missing production %s', (key) => {
+  it.each(['APP_URL', 'DATABASE_URL', 'SESSION_SECRET', 'MFA_ENCRYPTION_KEY', 'SECURITY_EVENT_HMAC_KEY'])('rejects missing production %s', (key) => {
     const source: Record<string, string> = production();
     delete source[key];
     expect(() => validateEnvironment(source)).toThrow(key);
+  });
+  it('does not require scheduler or OAuth encryption configuration before those phases', () => {
+    const source: Record<string, string> = production();
+    delete source.CRON_SECRET;
+    delete source.TOKEN_ENCRYPTION_KEY;
+    expect(validateEnvironment(source).APP_ENV).toBe('production');
+  });
+  it('requires independent security keys', () => {
+    expect(() => validateEnvironment({ ...production(), SECURITY_EVENT_HMAC_KEY: production().MFA_ENCRYPTION_KEY })).toThrow(EnvironmentValidationError);
+  });
+  it('rejects a production database binding in nonproduction modes', () => {
+    expect(() => validateEnvironment({ APP_ENV: 'test', DATABASE_URL: production().DATABASE_URL })).toThrow('DATABASE_URL');
+  });
+  it('rejects test configuration in production', () => {
+    expect(() => validateEnvironment({ ...production(), TEST_DATABASE_RESET_ALLOWED: '1' })).toThrow('TEST_DATABASE_RESET_ALLOWED');
   });
   it.each([
     { APP_ENV: 'staging' },

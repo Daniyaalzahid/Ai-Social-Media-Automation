@@ -42,3 +42,31 @@ jobs:
       - name: Install test browser on the managed CI runner
         run: npx --no-install playwright install chromium
       - run: npm run test:browser
+  mysql-foundation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Start temporary rootless MySQL, migrate isolated schemas, and restrict runtime grants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/local-mysql.py start
+          task_tools="$RUNNER_TEMP/bismillah-tools"
+          if [ -w /workspace ]; then task_tools=/workspace/.tools; fi
+          for mode in development test; do
+            node --env-file="$task_tools/phase2a-mysql/$mode.env" scripts/database.mjs migrate
+            node --env-file="$task_tools/phase2a-mysql/$mode.env" scripts/database.mjs seed
+          done
+          python3 scripts/local-mysql.py grants
+          node --env-file="$task_tools/phase2a-mysql/test.env" scripts/database.mjs test
+      - name: Stop temporary MySQL
+        if: always()
+        run: python3 scripts/local-mysql.py stop

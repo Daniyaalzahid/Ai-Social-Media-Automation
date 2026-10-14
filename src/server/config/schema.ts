@@ -24,7 +24,20 @@ const schema = z.object({
   APP_ENV: z.enum(['development', 'test', 'production']),
   APP_URL: appUrl,
   DATABASE_URL: databaseUrl,
+  DATABASE_MIGRATION_URL: databaseUrl,
+  DEV_DATABASE_URL: databaseUrl,
+  DEV_DATABASE_MIGRATION_URL: databaseUrl,
+  TEST_DATABASE_URL: databaseUrl,
+  TEST_DATABASE_MIGRATION_URL: databaseUrl,
+  TEST_DATABASE_RESET_ALLOWED: z.enum(['1']).optional(),
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(10).optional(),
+  DB_POOL_ACQUIRE_TIMEOUT_MS: z.coerce.number().int().min(100).max(10000).optional(),
+  DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(100).max(10000).optional(),
+  DB_CA_CERT_PATH: optionalText,
   SESSION_SECRET: secret,
+  MFA_ENCRYPTION_KEY: encryptionKey,
+  MFA_ENCRYPTION_KEY_ID: optionalText,
+  SECURITY_EVENT_HMAC_KEY: encryptionKey,
   TOKEN_ENCRYPTION_KEY: encryptionKey,
   CRON_SECRET: secret,
   OPENROUTER_API_KEY: optionalText,
@@ -70,11 +83,22 @@ export function validateEnvironment(source: EnvironmentSource): ServerEnvironmen
     fields.push(...result.error.issues.map((issue) => String(issue.path[0] ?? 'configuration')));
   }
   if (mode === 'production') {
-    for (const key of ['APP_URL', 'DATABASE_URL', 'SESSION_SECRET', 'TOKEN_ENCRYPTION_KEY', 'CRON_SECRET']) {
+    for (const key of ['APP_URL', 'DATABASE_URL', 'SESSION_SECRET', 'MFA_ENCRYPTION_KEY', 'SECURITY_EVENT_HMAC_KEY']) {
       if (!cleaned[key]) fields.push(key);
     }
     if (result.success && result.data.APP_URL && new URL(result.data.APP_URL).protocol !== 'https:') fields.push('APP_URL');
     if (result.success && result.data.DATABASE_URL && !new URL(result.data.DATABASE_URL).password) fields.push('DATABASE_URL');
+    for (const key of ['DEV_DATABASE_URL', 'DEV_DATABASE_MIGRATION_URL', 'TEST_DATABASE_URL', 'TEST_DATABASE_MIGRATION_URL', 'TEST_DATABASE_RESET_ALLOWED']) {
+      if (cleaned[key]) fields.push(key);
+    }
+  } else {
+    if (cleaned.DATABASE_URL) fields.push('DATABASE_URL');
+    if (cleaned.DATABASE_MIGRATION_URL) fields.push('DATABASE_MIGRATION_URL');
+    if (mode === 'development' && cleaned.TEST_DATABASE_RESET_ALLOWED) fields.push('TEST_DATABASE_RESET_ALLOWED');
+  }
+  const independentKeys = ['SESSION_SECRET', 'MFA_ENCRYPTION_KEY', 'SECURITY_EVENT_HMAC_KEY', 'TOKEN_ENCRYPTION_KEY'] as const;
+  for (const key of independentKeys) {
+    if (cleaned[key] && independentKeys.some((other) => other !== key && cleaned[other] === cleaned[key])) fields.push(key);
   }
   if (fields.length || !result.success) throw new EnvironmentValidationError(fields);
   return Object.freeze(result.data);
