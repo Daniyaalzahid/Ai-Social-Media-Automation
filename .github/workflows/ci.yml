@@ -34,3 +34,11 @@ jobs:
       - run: npm test
       - run: npm run secret-scan
       - run: npm run audit
+      - run: npm run build
+        env:
+          NODE_ENV: production
+          APP_ENV: production
+          NEXT_TELEMETRY_DISABLED: '1'
+      - name: Install test browser on the managed CI runner
+        run: npx --no-install playwright install chromium
+      - run: npm run test:browser

@@ -3,7 +3,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['tests/unit/**/*.test.ts'],
+    include: ['tests/unit/**/*.test.ts', 'tests/ui/**/*.test.tsx'],
+    setupFiles: ['./tests/setup.ts'],
     clearMocks: true,
     restoreMocks: true,
     maxWorkers: 2,

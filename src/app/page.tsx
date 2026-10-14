@@ -1,0 +1,9 @@
+import Link from 'next/link';
+import { Brand } from '../components/brand';
+import { Badge } from '../components/ui/badge';
+import { buttonClass } from '../components/ui/button';
+import { Icon } from '../components/ui/icon';
+
+export default function LandingPage() {
+  return <div className="landing"><a className="skip-link" href="#main-content">Skip to content</a><header className="public-nav"><Brand /><div className="public-nav-end"><Badge tone="warning">UI preview</Badge><Link href="/login" className={buttonClass('secondary')}>Your workspace <Icon name="arrow" /></Link></div></header><main id="main-content"><section className="landing-hero"><div><p className="eyebrow">THE SOCIAL SIDE OF BISMILLAH ELECTRONICS</p><h1>Good ideas.<br />Great <em>presence.</em></h1><p>A thoughtful place to turn your brand’s everyday stories into something worth sharing.</p><div className="landing-actions"><Link href="/overview" className={buttonClass()}>Explore the demo <Icon name="arrow" /></Link><Link href="/login" className={buttonClass('ghost')}>Sign-in preview</Link></div></div><div className="editorial-object" aria-hidden="true"><div className="editorial-card"><span>BISMILLAH SOCIAL AI / 01</span><strong>One brand.<br />Many stories.<br />All you.</strong><span>THOUGHTFUL CONTENT. HUMAN APPROVED.</span></div><div className="editorial-sticker">a little spark.<br />a big idea.<br /><Icon name="asterisk" /></div></div></section><section className="landing-platforms" aria-label="Planned social channels"><span>Five channels. Your voice.</span>{['Facebook', 'Instagram', 'TikTok', 'YouTube', 'LinkedIn'].map((name) => <p key={name}>{name}</p>)}</section></main><footer className="landing-footer"><span>Made for Bismillah Electronics.</span><span>Visual preview · no live publishing or integrations</span></footer></div>;
+}
