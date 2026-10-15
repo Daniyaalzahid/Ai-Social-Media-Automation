@@ -54,6 +54,9 @@ export interface InstallationStateTable {
 }
 
 export interface InvitationsTable {
+  intended_role_id: ColumnType<string | null, string | null | undefined, string | null>;
+  recipient_auth_version: ColumnType<number | null, number | null | undefined, number | null>;
+  issuer_auth_version: ColumnType<number | null, number | null | undefined, number | null>;
   id: string;
   user_id: string;
   issued_by: string;
@@ -169,6 +172,7 @@ export interface UsersTable {
 }
 
 export interface DatabaseSchema {
+  team_administration_guard: { id: number };
   audit_logs: AuditLogsTable;
   auth_challenges: AuthChallengesTable;
   auth_rate_limits: AuthRateLimitsTable;

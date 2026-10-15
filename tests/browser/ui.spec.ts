@@ -1,14 +1,11 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './secure-test';
 
 
-test.beforeEach(async ({ page }, info) => {
+test.beforeEach(async ({ page, context }, info) => {
   const fixture = JSON.parse(process.env.BSA_BROWSER_FIXTURE ?? '{}');
-  const user = fixture.users.filter((entry: { role: string }) => entry.role === 'VIEWER')[info.title === 'desktop shell, collapse, routes, and functional sign-in form' ? 0 : info.title.startsWith('mobile drawer') ? 1 : info.title.startsWith('tabs and dialog') ? 2 : info.title.startsWith('all navigation') ? 3 : info.title.startsWith('responsive surfaces') ? 4 : 5];
-  await page.goto('/login');
-  await page.getByLabel('Work email').fill(user.email);
-  await page.getByLabel('Password', { exact: true }).fill(fixture.password);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page).toHaveURL(/\/overview$/);
+  const index = info.title === 'desktop shell, collapse, routes, and functional sign-in form' ? 0 : info.title.startsWith('mobile drawer') ? 1 : info.title.startsWith('tabs and dialog') ? 2 : info.title.startsWith('all navigation') ? 3 : info.title.startsWith('responsive surfaces') ? 4 : 5;
+  await context.addCookies([{ name: '__Host-bsa-session', value: fixture.uiUsers[index].token, domain: 'localhost', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' }]);
+  await page.goto('/overview'); await expect(page).toHaveURL(/\/overview$/);
 });
 
 test.afterEach(async ({ page }) => {
@@ -74,11 +71,12 @@ test('tabs and dialog support keyboard interaction in a real browser', async ({ 
 });
 
 test('all navigation placeholders and error previews render without live services', async ({ page }) => {
-  for (const route of ['create-post', 'calendar', 'content', 'media', 'approvals', 'analytics', 'connections', 'brand-brain', 'team', 'activity', 'settings']) {
+  for (const route of ['create-post', 'calendar', 'content', 'media', 'approvals', 'analytics', 'connections', 'brand-brain', 'activity', 'settings']) {
     const response = await page.goto(`/${route}`);
     expect(response?.status()).toBe(200);
     await expect(page.getByText('UI placeholder')).toBeVisible();
   }
+  await page.goto('/team'); await expect(page.getByRole('heading', { name: 'Team', exact: true })).toBeVisible();
   for (const route of ['403', '500', 'offline']) {
     await page.goto(`/${route}`);
     await expect(page.getByText('Visual error-state preview')).toBeVisible();

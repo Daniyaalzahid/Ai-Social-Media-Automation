@@ -18,5 +18,9 @@
   {
     "name": "0004_phase2c_access_bindings.sql",
     "sha256": "48130cb75ecc20db6e1aec08fdb475f73b07e5a73eef6515cad3af2b7ca55925"
+  },
+  {
+    "name": "0005_phase2d_administration.sql",
+    "sha256": "9d973926b53e35a7721eacff046bbc347ff43b2a9a5558c6112ca28a2bbc716a"
   }
 ]

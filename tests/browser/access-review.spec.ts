@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { test, expect, type APIRequestContext } from '@playwright/test';
+import { test, expect, type APIRequestContext } from './secure-test';
 import { createDatabase } from '../../src/server/db/connection';
 import { resolveDatabaseConfiguration } from '../../src/server/db/config';
 import { createAccessService } from '../../src/server/auth/access';
@@ -81,7 +81,8 @@ for (const variant of ['valid', 'version', 'mandatory-role', 'pending', 'random'
     await context.addCookies([{ name: '__Host-bsa-session', value: variant === 'random' ? randomBytes(32).toString('base64url') : fixture.result.session.reveal(), domain: 'localhost', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' }]);
     for (const route of routes) {
       const response = await request.get(route, { maxRedirects: 0 });
-      expect(response.status()).toBe(variant === 'valid' ? 200 : 307);
+      const permitted = ['/overview', '/calendar', '/content', '/analytics'].includes(route);
+      expect(response.status()).toBe(variant === 'valid' ? permitted ? 200 : 403 : 307);
       if (variant === 'valid') expect(response.headers()['cache-control']).toContain('no-store');
     }
   } finally { await fixture.handle.close(); }

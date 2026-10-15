@@ -350,3 +350,12 @@ progress::-moz-progress-bar { background: var(--brand-primary); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Phase 2D: existing tokens and controls, responsive administration surfaces. */
+.team-stack { display: grid; gap: var(--space-4); min-width: 0; }
+.team-card { padding: var(--space-5); min-width: 0; }
+.team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--space-4); align-items: end; }
+.team-actions, .team-member-heading { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; }
+.team-actions .field { flex: 1 1 200px; }
+.team-email { overflow-wrap: anywhere; }
+.team-card h2 { font-size: var(--font-lg); }

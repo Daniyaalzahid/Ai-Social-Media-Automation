@@ -2,6 +2,9 @@ import type { NextConfig } from 'next';
 
 const config: NextConfig = {
   poweredByHeader: false,
+  // Preserve Flight headers for the early RSC denial check; route/page guards remain authoritative.
+  skipProxyUrlNormalize: true,
+  experimental: { authInterrupts: true },
   // Development overlay overlaps the approved sidebar footer controls.
   devIndicators: false,
   productionBrowserSourceMaps: false,

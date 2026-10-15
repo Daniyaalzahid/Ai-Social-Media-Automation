@@ -45,19 +45,19 @@ beforeAll(async () => {
 afterAll(async () => { await runtime.close(); await handle.close(); });
 
 describe('real MySQL security foundation', () => {
-  it('creates 15 security tables on real MySQL with enforced checks and explicit InnoDB', async () => {
+  it('creates 16 security tables on real MySQL with enforced checks and explicit InnoDB', async () => {
     const version = await sql<{ version: string }>`SELECT VERSION() AS version`.execute(db);
     expect(version.rows[0]?.version).toMatch(/^8\./);
     const tables = await sql<{ name: string; engine: string; collation: string }>`SELECT TABLE_NAME AS name, ENGINE AS engine, TABLE_COLLATION AS collation FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()`.execute(db);
     const security = tables.rows.filter((row) => !row.name.startsWith('kysely_') && row.name !== 'schema_migration_checksums');
-    expect(security).toHaveLength(15);
+    expect(security).toHaveLength(16);
     expect(security.every((row) => row.engine === 'InnoDB' && row.collation === 'utf8mb4_bin')).toBe(true);
   });
   it('migrations are repeatable and record checksums without reseeding bootstrap', async () => {
     await migrateDatabase(db);
     expect(await db.selectFrom('installation_state').selectAll().execute()).toHaveLength(1);
     const ledger = await sql<{ state: string }>`SELECT state FROM schema_migration_checksums`.execute(db);
-    expect(ledger.rows).toHaveLength(5);
+    expect(ledger.rows).toHaveLength(6);
     expect(ledger.rows.every((row) => row.state === 'applied')).toBe(true);
   });
   it('sets the server connection timezone to UTC for SQL defaults', async () => {

@@ -32,7 +32,7 @@ async function fixtures(transaction: Kysely<DatabaseSchema>) {
   await transaction.insertInto('password_reset_tokens').values({ id: randomUUID(), user_id: user, issued_by: user, token_hash: randomBytes(32),
     created_at: now, expires_at: expires, consumed_at: null, revoked_at: null }).execute();
   await transaction.insertInto('invitations').values({ id: randomUUID(), user_id: user, issued_by: user, token_hash: randomBytes(32),
-    created_at: now, expires_at: expires, accepted_at: null, revoked_at: null }).execute();
+    created_at: now, expires_at: expires, accepted_at: null, revoked_at: null, intended_role_id: role.id, recipient_auth_version: 1, issuer_auth_version: 1 }).execute();
   await transaction.insertInto('mfa_methods').values({ id: method, user_id: user, type: 'totp', state: 'pending', seed_ciphertext: randomBytes(20), iv: randomBytes(12),
     tag: randomBytes(16), key_id: 'synthetic', created_at: now, enrollment_expires_at: expires, confirmed_at: null, last_accepted_step: null }).execute();
   await transaction.insertInto('mfa_recovery_codes').values({ id: randomUUID(), method_id: method, batch_id: randomUUID(), code_hash: randomBytes(32), created_at: now, used_at: null, revoked_at: null }).execute();
@@ -54,6 +54,8 @@ const cases = [
   ['auth_rate_limits_subject_hash_length', sql`UPDATE auth_rate_limits SET subject_hash=${randomBytes(31)}`],
   ['installation_state_singleton', sql`UPDATE installation_state SET id=2`],
   ['installation_state_bootstrap_integrity', sql`UPDATE installation_state SET bootstrap_consumed_at=CURRENT_TIMESTAMP(3)`],
+  ['team_administration_guard_singleton', sql`UPDATE team_administration_guard SET id=2`],
+  ['invitations_binding', sql`UPDATE invitations SET recipient_auth_version=NULL`],
   ['invitations_expiry', sql`UPDATE invitations SET expires_at=created_at`],
   ['invitations_token_hash_length', sql`UPDATE invitations SET token_hash=${randomBytes(31)}`],
   ['invitations_lifecycle', sql`UPDATE invitations SET accepted_at=DATE_ADD(expires_at, INTERVAL 1 SECOND)`],
@@ -121,7 +123,7 @@ const foreignKeys = [
   ['audit_logs', 'actor_user_id', 'users'], ['audit_logs', 'target_user_id', 'users'], ['audit_logs', 'session_id', 'sessions'],
   ['auth_challenges', 'bound_session_id', 'sessions'], ['mfa_methods', 'enrollment_challenge_id', 'auth_challenges'],
   ['auth_challenges', 'user_id', 'users'], ['installation_state', 'initial_owner_id', 'users'],
-  ['invitations', 'user_id', 'users'], ['invitations', 'issued_by', 'users'],
+  ['invitations', 'intended_role_id', 'roles'], ['invitations', 'user_id', 'users'], ['invitations', 'issued_by', 'users'],
   ['mfa_methods', 'user_id', 'users'], ['mfa_recovery_codes', 'method_id', 'mfa_methods'],
   ['password_reset_tokens', 'user_id', 'users'], ['password_reset_tokens', 'issued_by', 'users'],
   ['role_permissions', 'role_id', 'roles'], ['role_permissions', 'permission_id', 'permissions'],
@@ -129,6 +131,7 @@ const foreignKeys = [
   ['user_roles', 'user_id', 'users'], ['user_roles', 'role_id', 'roles'], ['user_roles', 'assigned_by', 'users'],
 ] as const;
 function foreignKeyName(table: string, column: string, parent: string) {
+  if (table === 'invitations' && column === 'intended_role_id') return 'invitations_role_fk';
   if (table === 'auth_challenges' && column === 'bound_session_id') return 'auth_challenges_bound_session_fk';
   if (table === 'mfa_methods' && column === 'enrollment_challenge_id') return 'mfa_methods_enrollment_challenge_fk';
   return `${table}_${column}_${parent}_id_fk`;

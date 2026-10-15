@@ -16,7 +16,7 @@ export async function resetScratch(target: ReturnType<typeof scratchDatabase>) {
   const db = target.handle.db;
   await assertDestructiveTestDatabase(db, target.source);
   for (const table of ['audit_logs', 'security_events', 'mfa_recovery_codes', 'mfa_methods', 'auth_challenges', 'sessions', 'password_reset_tokens', 'invitations',
-    'installation_state', 'user_roles', 'role_permissions', 'permissions', 'roles', 'users', 'auth_rate_limits', 'kysely_migration', 'kysely_migration_lock', 'schema_migration_checksums']) {
+    'team_administration_guard', 'installation_state', 'user_roles', 'role_permissions', 'permissions', 'roles', 'users', 'auth_rate_limits', 'kysely_migration', 'kysely_migration_lock', 'schema_migration_checksums']) {
     await sql`DROP TABLE IF EXISTS ${sql.id(table)}`.execute(db);
   }
   await migrateDatabase(db); await seedCatalog(db);

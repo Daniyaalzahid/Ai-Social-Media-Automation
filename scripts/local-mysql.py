@@ -22,6 +22,7 @@ server = binary_root / 'usr/sbin/mysqld'
 client = binary_root / 'usr/bin/mysql'
 configuration = state / 'private.json'
 runtime_grants = {
+    'team_administration_guard': 'SELECT, UPDATE',
     'users': 'SELECT, INSERT, UPDATE',
     'roles': 'SELECT', 'permissions': 'SELECT', 'role_permissions': 'SELECT',
     'user_roles': 'SELECT, INSERT, UPDATE, DELETE',

@@ -1,5 +1,5 @@
 import { generate } from 'otplib';
-import { test, expect } from '@playwright/test';
+import { test, expect } from './secure-test';
 
 function fixture(role: string) {
   const data = JSON.parse(process.env.BSA_BROWSER_FIXTURE ?? '{}');

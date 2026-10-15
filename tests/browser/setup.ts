@@ -6,6 +6,9 @@ import { migrateDatabase } from '../../src/server/db/migrations';
 import { seedCatalog } from '../../src/server/db/seeds';
 import { canonicalCatalogId } from '../../src/server/db/seeds';
 import { hashPassword } from '../../src/server/auth/passwords';
+import { newTotpSecret, encryptMfa } from '../../src/server/auth/mfa-crypto';
+import { tokenHash } from '../../src/server/auth/access';
+import { SensitiveValue } from '../../src/server/security/sensitive';
 import { loadMfaKey } from '../../src/server/auth/mfa-crypto';
 import { browserConfiguration } from '../../src/server/auth/browser-security';
 
@@ -34,7 +37,18 @@ export default async function setup() {
     }
     // Playwright propagates global-setup environment to test workers. Keep
     // ephemeral credentials out of artifacts, files and reporter attachments.
-    process.env.BSA_BROWSER_FIXTURE = JSON.stringify({ password, users: fixtures });
+    const uiUsers = [], teamUsers = [];
+    for (const role of ['OWNER','OWNER','OWNER','OWNER','OWNER','OWNER', 'OWNER','MARKETING_ADMIN','CONTENT_CREATOR','REVIEWER','VIEWER']) {
+      const id = randomUUID(), methodId = randomUUID(), sessionId = randomUUID(), email = `${id}@example.test`, secret = newTotpSecret(), now = new Date();
+      const raw = new SensitiveValue(randomBytes(32).toString('base64url'));
+      await handle.db.insertInto('users').values({ id, email_normalized: email, display_name: 'Isolated administration test', status: 'active', password_hash: encoded.reveal(), password_changed_at: null, last_login_at: null }).execute();
+      await handle.db.insertInto('user_roles').values({ user_id: id, role_id: canonicalCatalogId('role', role), assigned_by: null }).execute();
+      if (['OWNER','MARKETING_ADMIN'].includes(role)) await handle.db.insertInto('mfa_methods').values({ id: methodId, user_id: id, type: 'totp', state: 'active', ...encryptMfa(secret, loadMfaKey(process.env), id, methodId), created_at: now, confirmed_at: now, enrollment_expires_at: null, last_accepted_step: null }).execute();
+      await handle.db.insertInto('sessions').values({ id: sessionId, user_id: id, token_hash: tokenHash(raw), auth_version: 1, created_at: now, last_activity_at: now, idle_expires_at: new Date(+now + 1800000), absolute_expires_at: new Date(+now + 86400000), authenticated_at: now, mfa_verified_at: ['OWNER','MARKETING_ADMIN'].includes(role) ? now : null, reauthenticated_at: null, revoked_at: null, revocation_reason: null, ip_hash: null, device_class: null }).execute();
+      const fixture = { id, email, role, token: raw.reveal(), secret: secret.reveal() };
+      if (uiUsers.length < 6) uiUsers.push(fixture); else teamUsers.push(fixture);
+    }
+    process.env.BSA_BROWSER_FIXTURE = JSON.stringify({ password, users: fixtures, uiUsers, teamUsers });
   } catch { throw new Error('Isolated browser fixture setup failed'); }
   finally { await handle.close(); }
 }

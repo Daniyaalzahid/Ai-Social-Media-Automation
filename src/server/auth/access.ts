@@ -15,6 +15,8 @@ export const ACCESS_FAILURE = Object.freeze({ ok: false as const, state: 'RESTAR
 export const SESSION_LIMIT = Object.freeze({ ok: false as const, state: 'SESSION_LIMIT' as const, message: 'Session limit reached. Sign out of another device before trying again.' });
 export const ACTIONS = ['REPLACE_FACTOR', 'REGENERATE_RECOVERY', 'REVOKE_SESSIONS'] as const;
 export type Action = typeof ACTIONS[number];
+export type RecentAction = Action | `TEAM_${string}:${string}`;
+function validRecentAction(action: string): boolean { return ACTIONS.some((value) => value === action) || /^TEAM_(INVITE|ROLE|STATUS|SESSIONS|REVOKE_INVITATION):[A-Za-z0-9_-]{43}$/.test(action); }
 export function tokenHash(token: SensitiveValue): Buffer {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token.reveal())) throw new SecurityOperationError();
   return createHash('sha256').update(token.reveal()).digest();
@@ -43,7 +45,7 @@ function validSession(row: Selectable<SessionsTable>, identity: Identity, now: D
     && now.getTime() < row.last_activity_at.getTime() + policy.idle
     && (!(identity.mandatory || identity.factor?.state === 'active') || (identity.factor?.state === 'active' && row.mfa_verified_at !== null && row.mfa_verified_at >= identity.factor.confirmed_at!));
 }
-async function lockedSession(db: Kysely<DatabaseSchema>, raw: SensitiveValue) {
+export async function lockedSession(db: Kysely<DatabaseSchema>, raw: SensitiveValue) {
   const hash = tokenHash(raw);
   const hint = await db.selectFrom('sessions').select('user_id').where('token_hash', '=', hash).executeTakeFirst();
   if (!hint) return null;
@@ -215,8 +217,8 @@ export function createAccessService(db: Kysely<DatabaseSchema>, mfaKey: MfaKey, 
         return { token: replacement, expiresAt: sessionDeadline(state.row, state.identity.role) };
       });
     },
-    async recentAuthentication(raw: SensitiveValue, password: unknown, code: unknown, action: Action, recovery = false) {
-      if (!z.enum(ACTIONS).safeParse(action).success || (recovery && action !== 'REPLACE_FACTOR')) return ACCESS_FAILURE;
+    async recentAuthentication(raw: SensitiveValue, password: unknown, code: unknown, action: RecentAction, recovery = false) {
+      if (!validRecentAction(action) || (recovery && action !== 'REPLACE_FACTOR')) return ACCESS_FAILURE;
       const snapshot = await transaction(async (tx) => lockedSession(tx, raw)); if (!snapshot?.identity.user.password_hash) return ACCESS_FAILURE;
       if (!await admitAuthentication(db, [{ scope: 'auth_global', hash: pseudonym(rateKey, 'global', 'password-stage') }, { scope: 'auth_network', hash: network.pseudonym(rateKey) }, { scope: 'auth_account', hash: pseudonym(rateKey, 'account', snapshot.identity.user.email_normalized) }])) return ACCESS_FAILURE;
       if (!await verifyPassword(new SensitiveValue(snapshot.identity.user.password_hash), password)) { await recordAccessEvent(db, { type: 'auth.recent_failure', userId: snapshot.identity.user.id, outcome: 'failure' }); return ACCESS_FAILURE; }
