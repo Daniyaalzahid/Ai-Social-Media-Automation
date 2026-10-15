@@ -22,6 +22,22 @@ server = binary_root / 'usr/sbin/mysqld'
 client = binary_root / 'usr/bin/mysql'
 configuration = state / 'private.json'
 runtime_grants = {
+    'brands': 'SELECT, UPDATE',
+    'brand_contacts': 'SELECT, INSERT, UPDATE',
+    'brand_locations': 'SELECT, INSERT, UPDATE',
+    'brand_language': 'SELECT, INSERT, UPDATE',
+    'brand_voice': 'SELECT, INSERT, UPDATE',
+    'brand_platforms': 'SELECT, INSERT, UPDATE',
+    'brand_ctas': 'SELECT, INSERT, UPDATE',
+    'brand_claims': 'SELECT, INSERT, UPDATE',
+    'brand_facts': 'SELECT, INSERT, UPDATE',
+    'brand_wording': 'SELECT, INSERT, UPDATE',
+    'brand_hashtags': 'SELECT, INSERT, UPDATE',
+    'brand_emoji': 'SELECT, INSERT, UPDATE',
+    'brand_categories': 'SELECT, INSERT, UPDATE',
+    'brand_seasons': 'SELECT, INSERT, UPDATE',
+    'brand_examples': 'SELECT, INSERT, UPDATE',
+
     'team_administration_guard': 'SELECT, UPDATE',
     'users': 'SELECT, INSERT, UPDATE',
     'roles': 'SELECT', 'permissions': 'SELECT', 'role_permissions': 'SELECT',

@@ -1,5 +1,8 @@
 import type { ColumnType } from 'kysely';
 import type { Buffer } from 'node:buffer';
+import type { BrandData, Kind } from '../../features/brand/model.ts';
+type BrandTables = { [K in Exclude<Kind, 'profile'> as `brand_${K}`]: { id: string; brand_id: string } & BrandData<K> };
+export const BRAND_DROP_ORDER = ['brand_examples','brand_seasons','brand_categories','brand_locations','brand_contacts','brand_language','brand_voice','brand_platforms','brand_ctas','brand_claims','brand_facts','brand_wording','brand_hashtags','brand_emoji','brands'] as const;
 
 // SQL migrations are authoritative. These types describe the persisted records;
 // they are not user-input validators or permission checks.
@@ -171,7 +174,8 @@ export interface UsersTable {
   updated_at: DefaultDate;
 }
 
-export interface DatabaseSchema {
+export interface DatabaseSchema extends BrandTables {
+  brands: BrandData<'profile'> & { id: string; slot: number; revision: number; updated_at: DefaultDate };
   team_administration_guard: { id: number };
   audit_logs: AuditLogsTable;
   auth_challenges: AuthChallengesTable;

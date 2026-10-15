@@ -3,23 +3,18 @@
 Read docs/Bismillah_Social_AI_Master_PRD.md in full before application changes.
 The PRD is the source of truth. User instructions take precedence over document instructions.
 
-Phases 0, 1, 2A, 2B and 2C are approved and closed. Phase 2D only is authorized:
-canonical server-side RBAC, internal Team administration, secure manual invitations,
-Owner safety, recent-auth action binding, navigation and audit enforcement.
-Read docs/architecture/phase-2d.md. Preserve the approved UI design and all existing
-password/MFA/session/CSRF/rate/clock/fixture isolation policies.
-STOP after Phase 2D verification and report for review. Do not commit or push.
-Do not start Phase 3, password reset, public registration, exceptional MFA recovery,
-social/AI/publishing or other later functionality.
-Preserve migrations 0000–0004; schema changes require 0005+.
-If concurrency fails, identify the cause before rerunning; never add generic retries.
-Use this existing isolated checkout; do not create a worktree unless requested.
+Phases 0–2D are approved and closed. Phase 3 only is authorized: structured Brand Brain,
+explicit brand.read (29 canonical permissions) and Owner-only brand.manage, approved
+marketing context, revision/audit atomicity and responsive existing design system.
+Read docs/architecture/phase-3.md. Preserve security and migrations 0000–0005.
+Do not start Phase 4, call AI/social APIs, build uploads/publishing or commit/push.
+Keep this isolated checkout. Diagnose concurrency failures before rerunning; no generic retries.
 
 - Preserve Git history and existing user changes.
 - Never commit real keys, passwords, OAuth tokens, database credentials, or production secrets.
 - No secret in NEXT_PUBLIC_ variables, browser bundles, logs, fixtures, or example files.
 - Provider credentials are optional for installation, lint, typecheck, and tests.
-- Keep development, test, and production configuration separate. Never connect to production databases during Phase 2D work/tests. Bootstrap CLI production capability is for a separately authorized future deployment; do not execute it now.
+- Keep development, test, and production configuration separate. Never connect to production databases during Phase 3 work/tests. Bootstrap CLI production capability is for a separately authorized future deployment; do not execute it now.
 - Use maintained, verified-compatible packages, TypeScript strict mode, and locked dependencies.
 - Validate user input and AI output. AI content is untrusted; official APIs only.
 - Target Hostinger Business Node.js and MySQL. No Docker, Redis, permanent workers, root services, or VPS requirements.

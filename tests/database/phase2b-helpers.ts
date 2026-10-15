@@ -1,3 +1,4 @@
+import { BRAND_DROP_ORDER } from '../../src/server/db/schema';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { createDatabase } from '../../src/server/db/connection';
@@ -15,7 +16,7 @@ export function scratchDatabase(name: 'bsa_test_clean' | 'bsa_test_recovery') {
 export async function resetScratch(target: ReturnType<typeof scratchDatabase>) {
   const db = target.handle.db;
   await assertDestructiveTestDatabase(db, target.source);
-  for (const table of ['audit_logs', 'security_events', 'mfa_recovery_codes', 'mfa_methods', 'auth_challenges', 'sessions', 'password_reset_tokens', 'invitations',
+  for (const table of [...BRAND_DROP_ORDER, 'audit_logs', 'security_events', 'mfa_recovery_codes', 'mfa_methods', 'auth_challenges', 'sessions', 'password_reset_tokens', 'invitations',
     'team_administration_guard', 'installation_state', 'user_roles', 'role_permissions', 'permissions', 'roles', 'users', 'auth_rate_limits', 'kysely_migration', 'kysely_migration_lock', 'schema_migration_checksums']) {
     await sql`DROP TABLE IF EXISTS ${sql.id(table)}`.execute(db);
   }

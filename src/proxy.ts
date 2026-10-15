@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from './server/db/client';
 import { authorizationContext, AuthorizationError, requireAnyPermission } from './server/authorization/authorization';
 import { ROUTE_PERMISSIONS } from './server/authorization/routes';
-import { SESSION_COOKIE } from './server/auth/browser-security';
+import { SESSION_COOKIE, browserConfiguration } from './server/auth/browser-security';
 import { SensitiveValue } from './server/security/sensitive';
 
 /** Early RSC denial prevents Flight streaming from fixing the HTTP status at 200.
@@ -13,7 +13,11 @@ export async function proxy(request: NextRequest) {
   headers.set('x-bsa-route', path); // Always overwrite client input.
   if (request.headers.has('rsc') || request.headers.has('next-router-prefetch')) {
     const privateHeaders = { 'Cache-Control': 'no-store, private', 'X-Robots-Tag': 'noindex, nofollow' };
-    const login = () => new NextResponse(null, { status: 307, headers: { ...privateHeaders, Location: '/login' } });
+    const login = () => {
+      // Next's Flight adapter requires an absolute redirect. Use configured origin, never forwarded hosts.
+      try { return new NextResponse(null, { status: 307, headers: { ...privateHeaders, Location: new URL('/login', browserConfiguration(process.env).origin).href } }); }
+      catch { return new NextResponse('Unable to access this workspace area.', { status: 503, headers: privateHeaders }); }
+    };
     const raw = request.cookies.get(SESSION_COOKIE)?.value;
     if (!raw || !/^[A-Za-z0-9_-]{43}$/.test(raw)) return login();
     try {

@@ -46,34 +46,60 @@ describe('adversarial PHC validation', () => {
     expect(await verifyPassword(strong, password)).toBe(true);
   });
 });
-describe('bounded FIFO capacity recovery', () => {
-  it.each([1, 2, 3, 4, 5])('bounds %i simultaneous requests to one active and two queued', async (count) => {
-    const capacity = new HashCapacity(1, 2, 750);
-    let active = 0, peak = 0;
-    const results = await Promise.allSettled(Array.from({ length: count }, () => capacity.run(async () => {
-      active++; peak = Math.max(peak, active);
-      await new Promise((resolve) => setTimeout(resolve, 10)); active--;
+describe('deterministic bounded FIFO capacity policy', () => {
+  afterEach(() => vi.useRealTimers());
+  const clock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+  it.each([1, 2, 3, 4, 5])('admits one active plus at most two FIFO waiters from %i requests', async (count) => {
+    clock(); const capacity = new HashCapacity(1, 2, 750);
+    const gates = Array.from({ length: count }, () => Promise.withResolvers<void>());
+    let active = 0, peak = 0; const order: number[] = [];
+    const settled = Promise.allSettled(gates.map((gate, index) => capacity.run(async () => {
+      active++; peak = Math.max(peak, active); order.push(index);
+      try { await gate.promise; } finally { active--; }
     })));
-    expect(peak).toBe(1);
+    await Promise.resolve(); expect(order).toEqual([0]);
+    for (const gate of gates) gate.resolve();
+    const results = await settled;
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(Math.min(count, 3));
+    expect(results.filter((result) => result.status === 'rejected').every((result) => result.reason instanceof Error && result.reason.name === 'HashCapacityError')).toBe(true);
+    expect(order).toEqual(Array.from({ length: Math.min(count, 3) }, (_, i) => i));
+    expect(peak).toBe(1); expect(active).toBe(0); expect(vi.getTimerCount()).toBe(0);
+    expect(await capacity.run(async () => 'recovered')).toBe('recovered');
   });
-  it('expires queued work, rejects excess work and recovers after attacker saturation', async () => {
-    const capacity = new HashCapacity(1, 2, 20);
-    let release!: () => void;
-    const held = capacity.run(() => new Promise<void>((resolve) => { release = resolve; }));
-    await Promise.resolve();
-    const queued = Array.from({ length: 2 }, () => capacity.run(async () => 'must-not-run'));
-    await expect(capacity.run(async () => 'excess')).rejects.toThrow('Password verification unavailable');
-    expect((await Promise.allSettled(queued)).every((result) => result.status === 'rejected')).toBe(true);
-    release(); await held;
-    expect(await capacity.run(async () => 'legitimate')).toBe('legitimate');
+  it('enforces the exact 750 ms deadline and never starts expired work', async () => {
+    clock(); const capacity = new HashCapacity(1, 2, 750), gate = Promise.withResolvers<void>();
+    const held = capacity.run(() => gate.promise), started: number[] = [];
+    const waiting = Promise.allSettled([1, 2].map((i) => capacity.run(async () => { started.push(i); })));
+    await vi.advanceTimersByTimeAsync(749); expect(started).toEqual([]); expect(vi.getTimerCount()).toBe(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect((await waiting).every((result) => result.status === 'rejected' && result.reason.name === 'HashCapacityError')).toBe(true);
+    gate.resolve(); await held; expect(started).toEqual([]); expect(vi.getTimerCount()).toBe(0);
+    expect(await capacity.run(async () => 'recovered')).toBe('recovered');
   });
-  it('transfers capacity to waiting legitimate work after an operation fails', async () => {
-    const capacity = new HashCapacity(1, 2);
-    const first = capacity.run(async () => { throw new Error('synthetic failure'); });
-    const second = capacity.run(async () => 'recovered');
-    await expect(first).rejects.toThrow('synthetic failure');
-    expect(await second).toBe('recovered');
+  it('admits the next still-valid FIFO waiter after an older waiter times out', async () => {
+    clock(); const capacity = new HashCapacity(1, 2, 750), gate = Promise.withResolvers<void>(), order: number[] = [];
+    const held = capacity.run(() => gate.promise);
+    const expired = Promise.allSettled([capacity.run(async () => { order.push(1); })]);
+    await vi.advanceTimersByTimeAsync(500);
+    const valid = capacity.run(async () => { order.push(2); });
+    await vi.advanceTimersByTimeAsync(250); expect((await expired)[0]?.status).toBe('rejected');
+    gate.resolve(); await Promise.all([held, valid]); expect(order).toEqual([2]); expect(vi.getTimerCount()).toBe(0);
+  });
+  it('rechecks a waiter deadline on release even before the timer callback runs', async () => {
+    clock(); const capacity = new HashCapacity(1, 2, 750), gate = Promise.withResolvers<void>();
+    const held = capacity.run(() => gate.promise); let started = false;
+    const waiting = Promise.allSettled([capacity.run(async () => { started = true; })]);
+    const now = vi.spyOn(performance, 'now').mockReturnValue(750);
+    try { gate.resolve(); await held; expect((await waiting)[0]?.status).toBe('rejected'); expect(started).toBe(false); expect(vi.getTimerCount()).toBe(0); }
+    finally { now.mockRestore(); }
+  });
+  it('releases failed work to FIFO waiters and leaves no occupied slot or timer', async () => {
+    clock(); const capacity = new HashCapacity(1, 2, 750), gate = Promise.withResolvers<void>(), order: number[] = [];
+    const results = Promise.allSettled([capacity.run(() => gate.promise), ...[1, 2].map((i) => capacity.run(async () => { order.push(i); }))]);
+    gate.reject(new Error('Synthetic work failure'));
+    expect((await results).map((result) => result.status)).toEqual(['rejected', 'fulfilled', 'fulfilled']);
+    expect(order).toEqual([1, 2]); expect(vi.getTimerCount()).toBe(0);
+    expect(await capacity.run(async () => 'recovered')).toBe('recovered');
   });
 });
 describe('plaintext and dummy hash handling', () => {

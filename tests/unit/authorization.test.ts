@@ -15,8 +15,8 @@ describe('canonical authorization and action commitments', () => {
     if (role === 'OWNER') { expect(() => requireOwner(context)).not.toThrow(); requireAllPermissions(context, PERMISSION_CODES); }
     else { expect(() => requireOwner(context)).toThrow('Access denied'); expect(() => requirePermission(context, 'users.manage')).toThrow('Access denied'); }
   });
-  it('uses unchanged 28 codes and only Owner has team/role/session admin capabilities', () => {
-    expect(PERMISSION_CODES).toHaveLength(28);
+  it('uses approved 29 codes and only Owner has team/role/session admin capabilities', () => {
+    expect(PERMISSION_CODES).toHaveLength(29);
     for (const role of ROLE_CODES) expect(ROLE_PERMISSIONS[role].includes('users.manage')).toBe(role === 'OWNER');
   });
   it('has explicit permission gates for every destination', () => {
@@ -47,7 +47,7 @@ describe('documented permission matrix agreement', () => {
     const { readFileSync } = await import('node:fs');
     for (const path of ['docs/architecture/phase-2d.md','docs/review/phase-2d.md']) {
       const rows = readFileSync(path, 'utf8').split('\n').filter((line) => /^\| [a-z_]+\.[a-z_]+ \|/.test(line));
-      expect(rows).toHaveLength(PERMISSION_CODES.length);
+      expect(rows).toHaveLength(PERMISSION_CODES.length - 1);
       for (const line of rows) {
         const cells = line.split('|').map((part) => part.trim()).filter(Boolean);
         const permission = cells[0]! as typeof PERMISSION_CODES[number]; expect(PERMISSION_CODES.includes(permission)).toBe(true);

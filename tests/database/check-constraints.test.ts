@@ -87,7 +87,7 @@ describe('direct MySQL enforcement of every security CHECK', () => {
     await expect(statement.execute(transaction)).rejects.toMatchObject({ code: 'ER_CHECK_CONSTRAINT_VIOLATED', sqlMessage: expect.stringContaining(name) });
   }));
   it('covers exactly every CHECK currently installed in the security schema', async () => {
-    const constraints = await sql<{ name: string; enforced: string }>`SELECT CONSTRAINT_NAME AS name, ENFORCED AS enforced FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND CONSTRAINT_TYPE='CHECK'`.execute(db);
+    const constraints = await sql<{ name: string; enforced: string }>`SELECT CONSTRAINT_NAME AS name, ENFORCED AS enforced FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND CONSTRAINT_TYPE='CHECK' AND TABLE_NAME NOT LIKE 'brand%'`.execute(db);
     expect(constraints.rows.every((row) => row.enforced === 'YES')).toBe(true);
     expect(constraints.rows.map((row) => row.name).sort()).toEqual(cases.map(([name]) => name).sort());
   });
@@ -143,8 +143,8 @@ describe('every security foreign key', () => {
       code: 'ER_NO_REFERENCED_ROW_2', sqlMessage: expect.stringContaining(foreignKeyName(table, column, parent)),
     });
   }));
-  it('matches all deployed relationships with RESTRICT for delete AND update', async () => {
-    const rows = await sql<{ name: string; parent: string; child: string; deletion: string; updating: string }>`SELECT CONSTRAINT_NAME AS name, REFERENCED_TABLE_NAME AS parent, TABLE_NAME AS child, DELETE_RULE AS deletion, UPDATE_RULE AS updating FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE()`.execute(db);
+  it('matches all deployed security relationships with RESTRICT for delete AND update', async () => {
+    const rows = await sql<{ name: string; parent: string; child: string; deletion: string; updating: string }>`SELECT CONSTRAINT_NAME AS name, REFERENCED_TABLE_NAME AS parent, TABLE_NAME AS child, DELETE_RULE AS deletion, UPDATE_RULE AS updating FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME NOT LIKE 'brand%'`.execute(db);
     expect(rows.rows).toHaveLength(foreignKeys.length);
     expect(rows.rows.every((row) => row.deletion === 'RESTRICT' && row.updating === 'RESTRICT')).toBe(true);
     expect(rows.rows.map((row) => row.name).sort()).toEqual(foreignKeys.map(([table, column, parent]) => foreignKeyName(table, column, parent)).sort());

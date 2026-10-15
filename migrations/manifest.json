@@ -22,5 +22,9 @@
   {
     "name": "0005_phase2d_administration.sql",
     "sha256": "9d973926b53e35a7721eacff046bbc347ff43b2a9a5558c6112ca28a2bbc716a"
+  },
+  {
+    "name": "0006_brand_brain.sql",
+    "sha256": "ac785551c2ca5070c2e62de90877788005c8f4a2ff02e5c74bb0cad50c895c37"
   }
 ]

@@ -1,3 +1,4 @@
+import { BRAND_DROP_ORDER } from '../../src/server/db/schema';
 import { hashPassword } from '../../src/server/auth/passwords';
 import { createAccessService, tokenHash } from '../../src/server/auth/access';
 import { encryptMfa, newTotpSecret } from '../../src/server/auth/mfa-crypto';
@@ -16,7 +17,7 @@ import type { DatabaseSchema } from '../../src/server/db/schema';
 import { Migrator, type Migration } from 'kysely/migration';
 import { randomBytes } from 'node:crypto';
 
-const dropOrder = ['audit_logs', 'security_events', 'mfa_recovery_codes', 'mfa_methods', 'auth_challenges', 'sessions',
+const dropOrder = [...BRAND_DROP_ORDER, 'audit_logs', 'security_events', 'mfa_recovery_codes', 'mfa_methods', 'auth_challenges', 'sessions',
   'password_reset_tokens', 'invitations', 'team_administration_guard', 'installation_state', 'user_roles', 'role_permissions', 'permissions', 'roles', 'users', 'auth_rate_limits',
   'kysely_migration', 'kysely_migration_lock', 'schema_migration_checksums'] as const;
 function scratch(name: 'bsa_test_clean' | 'bsa_test_recovery') {
@@ -27,6 +28,13 @@ function scratch(name: 'bsa_test_clean' | 'bsa_test_recovery') {
 async function clearScratch(db: Kysely<DatabaseSchema>, source: Record<string, string | undefined>) {
   await assertDestructiveTestDatabase(db, source);
   for (const table of dropOrder) await sql`DROP TABLE IF EXISTS ${sql.id(table)}`.execute(db);
+}
+
+async function seedLegacyCatalog(db: Kysely<DatabaseSchema>) {
+  await seedCatalog(db);
+  const id=canonicalCatalogId('permission','brand.read');
+  await db.deleteFrom('role_permissions').where('permission_id','=',id).execute();
+  await db.deleteFrom('permissions').where('id','=',id).execute();
 }
 
 describe('isolated clean migration and recovery', () => {
@@ -44,7 +52,7 @@ describe('isolated clean migration and recovery', () => {
       } }]));
       const result = await new Migrator({ db, provider: { getMigrations: async () => migrations } }).migrateToLatest();
       expect(result.error === undefined).toBe(true);
-      await seedCatalog(db);
+      await seedLegacyCatalog(db);
       const userId = randomUUID();
       await db.insertInto('users').values({ id: userId, email_normalized: `${userId}@example.test`, display_name: 'Synthetic upgrade', status: 'invited', password_hash: null, password_changed_at: null, last_login_at: null }).execute();
       const oldProof = randomUUID();
@@ -54,7 +62,7 @@ describe('isolated clean migration and recovery', () => {
       expect((await db.selectFrom('auth_challenges').select('purpose').where('id', '=', oldProof).executeTakeFirstOrThrow()).purpose).toBe('login_mfa');
       await db.insertInto('auth_challenges').values({ id: randomUUID(), user_id: userId, purpose: 'password_verified', token_hash: randomBytes(32), auth_version: 1, action_code: 'PASSWORD_VERIFIED', consumed_at: null, revoked_at: null,
         created_at: new Date(), expires_at: new Date(Date.now() + 300000) }).execute();
-      expect((await sql`SELECT name FROM schema_migration_checksums`.execute(db)).rows).toHaveLength(6);
+      expect((await sql`SELECT name FROM schema_migration_checksums`.execute(db)).rows).toHaveLength(7);
       await sql`UPDATE schema_migration_checksums SET sha256=${'0'.repeat(64)} WHERE name='0003_password_verified_challenges.sql'`.execute(db);
       await expect(migrateDatabase(db)).rejects.toThrow('checksum mismatch');
     } finally { await clearScratch(db, source); await migrateDatabase(db); await seedCatalog(db); await handle.close(); }
@@ -71,7 +79,7 @@ describe('isolated clean migration and recovery', () => {
         await sql`UPDATE schema_migration_checksums SET state='applied' WHERE name=${entry.name}`.execute(connection);
       } }]));
       expect((await new Migrator({ db, provider: { getMigrations: async () => migrations } }).migrateToLatest()).error === undefined).toBe(true);
-      await seedCatalog(db);
+      await seedLegacyCatalog(db);
       const userId = randomUUID(), methodId = randomUUID();
       await db.insertInto('users').values({ id: userId, email_normalized: `${userId}@example.test`, display_name: 'Synthetic upgrade', status: 'invited', password_hash: null, password_changed_at: null, last_login_at: null }).execute();
       await db.insertInto('mfa_methods').values({ id: methodId, user_id: userId, type: 'totp', state: 'active', created_at: new Date(Date.now() - 1000), seed_ciphertext: randomBytes(20), iv: randomBytes(12), tag: randomBytes(16), key_id: 'test-only', confirmed_at: new Date(), enrollment_expires_at: null, last_accepted_step: 1 }).execute();
@@ -97,7 +105,7 @@ describe('isolated clean migration and recovery', () => {
         await sql`UPDATE schema_migration_checksums SET state='applied' WHERE name=${entry.name}`.execute(c);
       } }]));
       expect((await new Migrator({ db, provider: { getMigrations: async () => migrations } }).migrateToLatest()).error === undefined).toBe(true);
-      await seedCatalog(db);
+      await seedLegacyCatalog(db);
       const id = randomUUID(); await db.insertInto('users').values({ id, email_normalized: `${id}@example.test`, display_name: 'Synthetic legacy invitation', password_hash: null, status: 'invited', password_changed_at: null, last_login_at: null }).execute();
       await db.insertInto('invitations').values({ id: randomUUID(), user_id: id, issued_by: id, token_hash: randomBytes(32), expires_at: new Date(Date.now() + 60000), accepted_at: null, revoked_at: null }).execute();
       // Preserve a genuinely usable Phase 2C identity, encrypted factor and session across 0005.
@@ -117,6 +125,48 @@ describe('isolated clean migration and recovery', () => {
       await sql`UPDATE schema_migration_checksums SET sha256=${'0'.repeat(64)} WHERE name='0005_phase2d_administration.sql'`.execute(db);
       await expect(migrateDatabase(db)).rejects.toThrow('checksum mismatch');
     } finally { await clearScratch(db, source); await migrateDatabase(db); await seedCatalog(db); await handle.close(); }
+  });
+  it('upgrades exact Phase 2D with only brand.read grants and preserves existing data', async () => {
+    const { source, handle }=scratch('bsa_test_clean'), db=handle.db;
+    try {
+      await clearScratch(db,source);
+      await sql`CREATE TABLE schema_migration_checksums(name varchar(150) PRIMARY KEY,sha256 char(64) NOT NULL,state enum('applying','applied') NOT NULL) ENGINE=InnoDB`.execute(db);
+      const entries=(await readMigrations()).slice(0,6);
+      const migrations:Record<string,Migration>=Object.fromEntries(entries.map((entry)=>[entry.name,{up:async(c)=>{
+        await sql`INSERT INTO schema_migration_checksums(name,sha256,state) VALUES(${entry.name},${entry.sha256},'applying')`.execute(c);
+        for(const statement of entry.statements)await sql.raw(statement).execute(c);
+        await sql`UPDATE schema_migration_checksums SET state='applied' WHERE name=${entry.name}`.execute(c);
+      }}]));
+      expect((await new Migrator({db,provider:{getMigrations:async()=>migrations}}).migrateToLatest()).error===undefined).toBe(true);
+      await seedLegacyCatalog(db);
+      const before=await db.selectFrom('role_permissions').selectAll().orderBy('role_id').orderBy('permission_id').execute();
+      expect(await db.selectFrom('permissions').selectAll().execute()).toHaveLength(28);
+      const id=randomUUID();await db.insertInto('users').values({id,email_normalized:`${id}@example.test`,display_name:'Legacy identity',password_hash:null,status:'invited',password_changed_at:null,last_login_at:null}).execute();
+      const user=await db.selectFrom('users').selectAll().where('id','=',id).executeTakeFirstOrThrow();
+      const ownerId=randomUUID(),methodId=randomUUID(),sessionId=randomUUID(),now=new Date(),key={key:randomBytes(32),id:'phase2d-upgrade-review'},raw=new SensitiveValue(randomBytes(32).toString('base64url'));
+      await db.insertInto('users').values({id:ownerId,email_normalized:`${ownerId}@example.test`,display_name:'Existing Owner',password_hash:(await hashPassword('public synthetic upgrade review phrase')).reveal(),status:'active',password_changed_at:now,last_login_at:null}).execute();
+      await db.insertInto('user_roles').values([{user_id:ownerId,role_id:canonicalCatalogId('role','OWNER'),assigned_by:null},{user_id:id,role_id:canonicalCatalogId('role','VIEWER'),assigned_by:ownerId}]).execute();
+      await db.insertInto('mfa_methods').values({id:methodId,user_id:ownerId,type:'totp',state:'active',...encryptMfa(newTotpSecret(),key,ownerId,methodId),created_at:now,confirmed_at:now,enrollment_expires_at:null,last_accepted_step:null}).execute();
+      await db.insertInto('sessions').values({id:sessionId,user_id:ownerId,token_hash:tokenHash(raw),auth_version:1,created_at:now,last_activity_at:now,idle_expires_at:new Date(+now+1800000),absolute_expires_at:new Date(+now+86400000),authenticated_at:now,mfa_verified_at:now,reauthenticated_at:null,revoked_at:null,revocation_reason:null,ip_hash:null,device_class:null}).execute();
+      await db.insertInto('auth_challenges').values({id:randomUUID(),user_id:ownerId,token_hash:randomBytes(32),purpose:'reauthentication',action_code:'REVOKE_SESSIONS',bound_session_id:sessionId,auth_version:1,created_at:now,expires_at:new Date(+now+300000),consumed_at:null,revoked_at:null}).execute();
+      await db.insertInto('invitations').values({id:randomUUID(),user_id:id,issued_by:ownerId,token_hash:randomBytes(32),intended_role_id:canonicalCatalogId('role','VIEWER'),recipient_auth_version:1,issuer_auth_version:1,created_at:now,expires_at:new Date(+now+86400000),accepted_at:null,revoked_at:null}).execute();
+      await db.updateTable('installation_state').set({bootstrap_consumed_at:now,initial_owner_id:ownerId}).where('id','=',1).execute();
+      await db.insertInto('audit_logs').values({id:randomUUID(),actor_user_id:ownerId,target_user_id:id,session_id:sessionId,action:'team.invitation_created',outcome:'success',correlation_id:randomUUID(),metadata_safe_json:JSON.stringify({reasonCode:'team.invitation_created'}),ip_hash:null}).execute();
+      const oldState=async()=>JSON.stringify(await Promise.all([db.selectFrom('users').selectAll().orderBy('id').execute(),db.selectFrom('user_roles').selectAll().orderBy('user_id').execute(),db.selectFrom('sessions').selectAll().orderBy('id').execute(),db.selectFrom('mfa_methods').selectAll().orderBy('id').execute(),db.selectFrom('auth_challenges').selectAll().orderBy('id').execute(),db.selectFrom('invitations').selectAll().orderBy('id').execute(),db.selectFrom('installation_state').selectAll().execute(),db.selectFrom('team_administration_guard').selectAll().execute(),db.selectFrom('audit_logs').selectAll().orderBy('id').execute()]));
+      const originalState=await oldState();
+      await migrateDatabase(db);await migrateDatabase(db);
+      expect((await oldState())===originalState).toBe(true);expect((await createAccessService(db,key,randomBytes(32),NetworkIdentity.fromSocketAddress('::')).validateSession(raw))!==null).toBe(true);
+      expect(await db.selectFrom('users').selectAll().where('id','=',id).executeTakeFirstOrThrow()).toEqual(user);
+      expect(await db.selectFrom('permissions').selectAll().execute()).toHaveLength(29);
+      const permission=canonicalCatalogId('permission','brand.read');
+      const after=await db.selectFrom('role_permissions').selectAll().orderBy('role_id').orderBy('permission_id').execute();
+      expect(after.filter((r)=>r.permission_id!==permission)).toEqual(before);
+      expect(after.filter((r)=>r.permission_id===permission).map((r)=>r.role_id).sort()).toEqual(['OWNER','MARKETING_ADMIN','CONTENT_CREATOR','REVIEWER'].map((r)=>canonicalCatalogId('role',r)).sort());
+      const seeded=await db.selectFrom('brand_claims').selectAll().execute();expect(seeded).toHaveLength(13);const {z}=await import('zod');expect(seeded.every((row)=>z.uuid().safeParse(row.id).success)).toBe(true);
+      const snapshot=await db.selectFrom('brands').selectAll().execute();await seedCatalog(db);await seedCatalog(db);expect(await db.selectFrom('brands').selectAll().execute()).toEqual(snapshot);
+      await sql`UPDATE schema_migration_checksums SET sha256=${'0'.repeat(64)} WHERE name='0006_brand_brain.sql'`.execute(db);
+      await expect(migrateDatabase(db)).rejects.toThrow('checksum mismatch');
+    }finally{await clearScratch(db,source);await migrateDatabase(db);await seedCatalog(db);await handle.close();}
   });
   it('migrates a completely clean database and permits a repeat without changes', async () => {
     const { source, handle } = scratch('bsa_test_clean');

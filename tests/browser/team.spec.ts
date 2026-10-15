@@ -38,8 +38,8 @@ for (const role of ['OWNER','MARKETING_ADMIN','CONTENT_CREATOR','REVIEWER','VIEW
   }
   const allowed: Record<string, string[]> = {
     OWNER: ['overview','create-post','calendar','content','media','approvals','analytics','connections','brand-brain','team','activity','settings','ui-kit'],
-    MARKETING_ADMIN: ['overview','create-post','calendar','content','media','approvals','analytics'],
-    CONTENT_CREATOR: ['overview','create-post','calendar','content','media'], REVIEWER: ['overview','calendar','content','approvals'], VIEWER: ['overview','calendar','content','analytics'],
+    MARKETING_ADMIN: ['brand-brain','overview','create-post','calendar','content','media','approvals','analytics'],
+    CONTENT_CREATOR: ['brand-brain','overview','create-post','calendar','content','media'], REVIEWER: ['brand-brain','overview','calendar','content','approvals'], VIEWER: ['overview','calendar','content','analytics'],
   };
   for (const route of allowed.OWNER!) {
     const response = await request.get(`/${route}`, { headers: { 'x-bsa-route': '/overview' } });

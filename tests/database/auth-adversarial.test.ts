@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import argon2 from 'argon2';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { KyselyPlugin } from 'kysely';
 import { scratchDatabase, resetScratch, makeUser } from './phase2b-helpers';
@@ -9,6 +10,7 @@ import * as passwords from '../../src/server/auth/passwords';
 import { createDatabase } from '../../src/server/db/connection';
 import { resolveDatabaseConfiguration } from '../../src/server/db/config';
 import { bootstrapOwner } from '../../src/server/auth/bootstrap';
+import { passwordAttemptDiagnostic } from '../helpers/password-attempt-diagnostic';
 
 const target = scratchDatabase('bsa_test_clean'), db = target.handle.db;
 const key = randomBytes(32), network = NetworkIdentity.fromSocketAddress('127.0.0.1'), context = { key, network };
@@ -51,23 +53,43 @@ describe('generic failures and expensive-work admission', () => {
     }
     expect(native.mock.calls.length).toBe(0); expect(dummy.mock.calls.length).toBe(0);
   });
-  it('allows two legitimate concurrent passwords without increasing active Argon2 work', async () => {
+  it('serializes two real password verifications under available host capacity', async () => {
     const second = await makeUser(db, password);
     const service = await createAuthenticationService(db, key);
-    const results = await Promise.all([user.email, second.email].map((email) => service.checkPassword({ email, password, network })));
-    expect(results.every((result) => result.ok)).toBe(true);
-    expect(await db.selectFrom('sessions').select('id').execute()).toHaveLength(0);
+    const diagnostic = passwordAttemptDiagnostic(db);
+    try {
+      const results = await Promise.all([user.email, second.email].map((email, index) => diagnostic.run(index === 0 ? 1 : 2, () => service.checkPassword({ email, password, network }))));
+      const evidence = JSON.stringify({ ...diagnostic.report(), ...(!results.every((result) => result.ok) ? { resources: diagnostic.resources() } : {}) });
+      process.stdout.write(`Two-password evidence: ${evidence}\n`);
+      // Real native/MySQL availability check, not a promise of success under host starvation.
+      // Unexpected CAPACITY remains a failure with safe evidence, never an accepted alternative.
+      expect(results.every((result) => result.ok), evidence).toBe(true);
+      expect(diagnostic.report().maximumActive, evidence).toBe(1);
+      expect(diagnostic.report().databaseErrors, evidence).toEqual([]);
+      expect(diagnostic.report().attempts.every((attempt) => attempt.classification === 'PASSWORD_VERIFIED' && attempt.admitted && attempt.rateAdmitted && attempt.nativeMs !== null), evidence).toBe(true);
+      expect(await db.selectFrom('sessions').select('id').execute()).toHaveLength(0);
+    } finally { diagnostic.close(); }
   });
-  it('recovers legitimate authentication deterministically after attacker capacity releases', async () => {
+  it('rejects known and unknown accounts generically before native work when the FIFO queue is full', async () => {
     const service = await createAuthenticationService(db, key);
     const state = globalThis as typeof globalThis & { bismillahHashCapacity: passwords.HashCapacity };
-    let release!: () => void;
-    const held = state.bismillahHashCapacity.run(() => new Promise<void>((resolve) => { release = resolve; }));
-    await Promise.resolve();
+    // Freeze only admission timers/performance, not Date or MySQL's real clock.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    const native = vi.spyOn(argon2, 'verify'), diagnostic = passwordAttemptDiagnostic(db);
+    const gate = Promise.withResolvers<void>(), started = Promise.withResolvers<void>();
+    const held = state.bismillahHashCapacity.run(async () => { started.resolve(); await gate.promise; });
+    await started.promise;
+    const waiting = [1, 2].map(() => state.bismillahHashCapacity.run(async () => undefined));
+    // Observe all outcomes immediately, including any unexpected timer rejection.
+    const settled = Promise.allSettled([held, ...waiting]);
     try {
-      const results = await Promise.all([user.email, `${randomUUID()}@example.test`].map((email) => service.checkPassword({ email, password, network })));
+      const results = await Promise.all([user.email, `${randomUUID()}@example.test`].map((email, index) => diagnostic.run(index === 0 ? 1 : 2, () => service.checkPassword({ email, password, network }))));
       expect(results.every((result) => JSON.stringify(result) === JSON.stringify(AUTHENTICATION_FAILURE))).toBe(true);
-    } finally { release(); await held; }
+      const evidence = diagnostic.report();
+      expect(evidence.attempts.every((attempt) => attempt.classification === 'CAPACITY' && !attempt.admitted && attempt.nativeMs === null && attempt.rateAdmitted)).toBe(true);
+      expect(evidence.maximumActive).toBe(1); expect(evidence.databaseErrors).toEqual([]); expect(native.mock.calls.length).toBe(0);
+      expect(await db.selectFrom('auth_challenges').select('id').execute()).toHaveLength(0);
+    } finally { gate.resolve(); const outcomes = await settled; diagnostic.close(); native.mockRestore(); vi.useRealTimers(); expect(outcomes.every((result) => result.status === 'fulfilled')).toBe(true); }
     expect((await service.checkPassword({ email: user.email, password, network })).ok).toBe(true);
   });
 });

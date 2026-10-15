@@ -8,7 +8,7 @@ import { PageHeader } from '../../../components/ui/page-header';
 
 export const dynamicParams = false;
 export function generateStaticParams() {
-  return navigation.filter((item) => item.href !== '/overview' && item.href !== '/team').map((item) => ({ section: item.href.slice(1) }));
+  return navigation.filter((item) => item.href !== '/overview' && item.href !== '/team' && item.href !== '/brand-brain').map((item) => ({ section: item.href.slice(1) }));
 }
 export async function generateMetadata({ params }: { params: Promise<{ section: string }> }) {
   const { section } = await params;

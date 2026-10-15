@@ -109,7 +109,7 @@ describe('security catalog and reviewed migration inputs', () => {
   });
   it('verifies migration file checksums and rejects missing manifest entries', async () => {
     const entries = await readMigrations();
-    expect(entries.map((entry) => entry.name)).toEqual(['0000_phase2a_security_foundation.sql', '0001_security_invariants.sql', '0002_review_integrity.sql', '0003_password_verified_challenges.sql', '0004_phase2c_access_bindings.sql', '0005_phase2d_administration.sql']);
+    expect(entries.map((entry) => entry.name)).toEqual(['0000_phase2a_security_foundation.sql', '0001_security_invariants.sql', '0002_review_integrity.sql', '0003_password_verified_challenges.sql', '0004_phase2c_access_bindings.sql', '0005_phase2d_administration.sql', '0006_brand_brain.sql']);
     expect(entries.every((entry) => entry.statements.length > 0)).toBe(true);
   });
 });
