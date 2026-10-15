@@ -39,15 +39,15 @@ describe('workspace shell and presentation pages', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
-  it('labels sign-in fields while preventing real credential entry or submission', () => {
+  it('labels functional sign-in fields without changing the editorial screen', () => {
     render(<LoginForm />);
-    expect(screen.getByRole('form', { name: 'Sign in preview' })).toBeInTheDocument();
+    expect(screen.getByRole('form', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.getByLabelText('Work email')).toHaveAttribute('type', 'email');
-    expect(screen.getByLabelText('Work email')).toBeDisabled();
+    expect(screen.getByLabelText('Work email')).not.toBeDisabled();
     expect(screen.getByLabelText('Password')).toHaveAttribute('autoComplete', 'current-password');
-    expect(screen.getByLabelText('Password')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled();
-    expect(screen.getByRole('link', { name: /Explore demo workspace/ })).toHaveAttribute('href', '/overview');
+    expect(screen.getByLabelText('Password')).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Sign in' })).not.toBeDisabled();
+    expect(screen.getByRole('link', { name: /Back to home/ })).toHaveAttribute('href', '/');
   });
   it('clearly labels mock metrics and does not claim live integrations', () => {
     render(<Overview />);

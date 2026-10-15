@@ -14,5 +14,9 @@
   {
     "name": "0003_password_verified_challenges.sql",
     "sha256": "978abcf2a7456c1259c5208442eebdeb9e78233b1d692c40f2ef2e2cded7a401"
+  },
+  {
+    "name": "0004_phase2c_access_bindings.sql",
+    "sha256": "48130cb75ecc20db6e1aec08fdb475f73b07e5a73eef6515cad3af2b7ca55925"
   }
 ]

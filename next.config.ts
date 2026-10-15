@@ -2,6 +2,8 @@ import type { NextConfig } from 'next';
 
 const config: NextConfig = {
   poweredByHeader: false,
+  // Development overlay overlaps the approved sidebar footer controls.
+  devIndicators: false,
   productionBrowserSourceMaps: false,
   reactStrictMode: true,
   async headers() {

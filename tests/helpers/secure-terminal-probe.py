@@ -63,8 +63,9 @@ with tempfile.TemporaryDirectory(prefix="bsa-tty-review-") as directory:
                     os.write(item["master"], b"\x03")
                 elif mode == "signal":
                     item["child"].send_signal(signal.SIGINT)
-                elif mode == "invalid_utf8":
-                    os.write(item["master"], b"\xff\r")
+                elif mode in ["invalid_utf8", "utf8_truncated", "utf8_continuation", "utf8_overlong"]:
+                    sequence = {"invalid_utf8": b"\xff", "utf8_truncated": b"\xf0\x9f\x94", "utf8_continuation": b"\xe2\x28\xa1", "utf8_overlong": b"\xc0\xaf"}[mode]
+                    os.write(item["master"], sequence + b"\r")
                 else:
                     os.write(item["master"], secret + (b"\r" if mode == "hidden" else b""))
                 item["stage"] = 1

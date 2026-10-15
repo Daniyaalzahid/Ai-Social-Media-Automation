@@ -57,6 +57,7 @@ const cases = [
   ['invitations_expiry', sql`UPDATE invitations SET expires_at=created_at`],
   ['invitations_token_hash_length', sql`UPDATE invitations SET token_hash=${randomBytes(31)}`],
   ['invitations_lifecycle', sql`UPDATE invitations SET accepted_at=DATE_ADD(expires_at, INTERVAL 1 SECOND)`],
+  ['mfa_methods_active_binding', sql`UPDATE mfa_methods SET state='active', confirmed_at=CURRENT_TIMESTAMP(3), enrollment_expires_at=NULL, enrollment_challenge_id=(SELECT id FROM auth_challenges LIMIT 1)`],
   ['mfa_methods_state_integrity', sql`UPDATE mfa_methods SET state='active'`],
   ['mfa_methods_seed_not_empty', sql`UPDATE mfa_methods SET seed_ciphertext=${Buffer.alloc(0)}`],
   ['mfa_methods_iv_length', sql`UPDATE mfa_methods SET iv=${randomBytes(11)}`],
@@ -118,6 +119,7 @@ describe('direct MySQL enforcement of every security CHECK', () => {
 
 const foreignKeys = [
   ['audit_logs', 'actor_user_id', 'users'], ['audit_logs', 'target_user_id', 'users'], ['audit_logs', 'session_id', 'sessions'],
+  ['auth_challenges', 'bound_session_id', 'sessions'], ['mfa_methods', 'enrollment_challenge_id', 'auth_challenges'],
   ['auth_challenges', 'user_id', 'users'], ['installation_state', 'initial_owner_id', 'users'],
   ['invitations', 'user_id', 'users'], ['invitations', 'issued_by', 'users'],
   ['mfa_methods', 'user_id', 'users'], ['mfa_recovery_codes', 'method_id', 'mfa_methods'],
@@ -126,17 +128,22 @@ const foreignKeys = [
   ['security_events', 'user_id', 'users'], ['sessions', 'user_id', 'users'],
   ['user_roles', 'user_id', 'users'], ['user_roles', 'role_id', 'roles'], ['user_roles', 'assigned_by', 'users'],
 ] as const;
+function foreignKeyName(table: string, column: string, parent: string) {
+  if (table === 'auth_challenges' && column === 'bound_session_id') return 'auth_challenges_bound_session_fk';
+  if (table === 'mfa_methods' && column === 'enrollment_challenge_id') return 'mfa_methods_enrollment_challenge_fk';
+  return `${table}_${column}_${parent}_id_fk`;
+}
 describe('every security foreign key', () => {
   it.each(foreignKeys)('%s.%s rejects an orphan reference to %s', (table, column, parent) => isolated(async (transaction) => {
     const changes = table === 'installation_state' ? sql`, bootstrap_consumed_at=CURRENT_TIMESTAMP(3)` : sql``;
     await expect(sql`UPDATE ${sql.id(table)} SET ${sql.id(column)}=${randomUUID()} ${changes} LIMIT 1`.execute(transaction)).rejects.toMatchObject({
-      code: 'ER_NO_REFERENCED_ROW_2', sqlMessage: expect.stringContaining(`${table}_${column}_${parent}_id_fk`),
+      code: 'ER_NO_REFERENCED_ROW_2', sqlMessage: expect.stringContaining(foreignKeyName(table, column, parent)),
     });
   }));
   it('matches all deployed relationships with RESTRICT for delete AND update', async () => {
     const rows = await sql<{ name: string; parent: string; child: string; deletion: string; updating: string }>`SELECT CONSTRAINT_NAME AS name, REFERENCED_TABLE_NAME AS parent, TABLE_NAME AS child, DELETE_RULE AS deletion, UPDATE_RULE AS updating FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE()`.execute(db);
     expect(rows.rows).toHaveLength(foreignKeys.length);
     expect(rows.rows.every((row) => row.deletion === 'RESTRICT' && row.updating === 'RESTRICT')).toBe(true);
-    expect(rows.rows.map((row) => row.name).sort()).toEqual(foreignKeys.map(([table, column, parent]) => `${table}_${column}_${parent}_id_fk`).sort());
+    expect(rows.rows.map((row) => row.name).sort()).toEqual(foreignKeys.map(([table, column, parent]) => foreignKeyName(table, column, parent)).sort());
   });
 });

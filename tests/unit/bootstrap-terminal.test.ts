@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory(prefix='bsa-tty-') as directory:
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({ success: true, leaked: false });
   });
-  it.each(['hidden', 'ctrl_c', 'signal', 'error', 'invalid_utf8', 'cli_args'])('restores the real terminal and protects input on %s', (mode) => {
+  it.each(['hidden', 'ctrl_c', 'signal', 'error', 'invalid_utf8', 'utf8_truncated', 'utf8_continuation', 'utf8_overlong', 'cli_args'])('restores the real terminal and protects input on %s', (mode) => {
     const result = spawnSync('python3', ['tests/helpers/secure-terminal-probe.py', path.resolve('.'), process.execPath, mode], { encoding: 'utf8', timeout: 25000 });
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({ successes: mode === 'hidden' ? 1 : 0, safeFailures: mode === 'hidden' ? 0 : 1, restored: true, leaked: false, unexpectedSuccess: false });

@@ -1,21 +1,39 @@
 import { expect, test } from '@playwright/test';
 
-test('desktop shell, collapse, routes, and safe preview form', async ({ page }) => {
+
+test.beforeEach(async ({ page }, info) => {
+  const fixture = JSON.parse(process.env.BSA_BROWSER_FIXTURE ?? '{}');
+  const user = fixture.users.filter((entry: { role: string }) => entry.role === 'VIEWER')[info.title === 'desktop shell, collapse, routes, and functional sign-in form' ? 0 : info.title.startsWith('mobile drawer') ? 1 : info.title.startsWith('tabs and dialog') ? 2 : info.title.startsWith('all navigation') ? 3 : info.title.startsWith('responsive surfaces') ? 4 : 5];
+  await page.goto('/login');
+  await page.getByLabel('Work email').fill(user.email);
+  await page.getByLabel('Password', { exact: true }).fill(fixture.password);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page).toHaveURL(/\/overview$/);
+});
+
+test.afterEach(async ({ page }) => {
+  await page.evaluate(async () => {
+    const csrf = await (await fetch('/api/auth', { cache: 'no-store' })).json();
+    await fetch('/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf.csrf }, body: JSON.stringify({ action: 'logout' }) });
+  });
+});
+
+test('desktop shell, collapse, routes, and functional sign-in form', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/overview');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Content overview');
   await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link')).toHaveCount(12);
-  await page.getByRole('button', { name: 'Collapse sidebar' }).click();
+  await test.step('Collapse hydrated sidebar', async () => { await page.getByRole('button', { name: 'Collapse sidebar' }).click(); });
   await expect(page.getByRole('link', { name: 'Brand Brain', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Expand sidebar' }).click();
-  await page.getByRole('link', { name: 'Calendar', exact: true }).click();
+  await test.step('Expand hydrated sidebar', async () => { await page.getByRole('button', { name: 'Expand sidebar' }).click(); });
+  await test.step('Navigate to protected calendar', async () => { await page.getByRole('link', { name: 'Calendar', exact: true }).click(); });
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Calendar');
   await expect(page.locator('#main-content')).toBeFocused();
   await page.goto('/login');
-  await expect(page.getByLabel('Work email')).toBeDisabled();
-  await expect(page.getByLabel('Password', { exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Work email')).toBeEnabled();
+  await expect(page.getByLabel('Password', { exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
   expect(errors).toEqual([]);
 });
 

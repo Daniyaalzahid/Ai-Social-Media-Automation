@@ -29,6 +29,7 @@ export interface AuthChallengesTable {
   purpose: 'login_mfa' | 'mfa_enrollment' | 'mfa_recovery' | 'reauthentication' | 'password_reset' | 'password_verified';
   auth_version: number;
   action_code: string | null;
+  bound_session_id: ColumnType<string | null, string | null | undefined, string | null>;
   attempts: DefaultNumber;
   created_at: DefaultDate;
   expires_at: DateValue;
@@ -76,6 +77,7 @@ export interface MfaMethodsTable {
   enrollment_expires_at: DateValue | null;
   confirmed_at: DateValue | null;
   last_accepted_step: number | null;
+  enrollment_challenge_id: ColumnType<string | null, string | null | undefined, string | null>;
 }
 
 export interface MfaRecoveryCodesTable {

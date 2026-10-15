@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Temporary, rootless Linux x64 MySQL for development/CI. Never contacts production."""
+import base64
 import hashlib
 import json
 import os
@@ -136,12 +137,56 @@ def grant_runtime():
         execute_sql('\n'.join(statements))
     print('Isolated runtime grants applied; no server-wide privileges required.')
 
+def browser_setup():
+    """Provision only a disposable loopback development browser-test schema."""
+    if not configuration.exists():
+        raise RuntimeError('Start isolated MySQL first')
+    execute_sql('SELECT 1;')
+    private = state / 'browser-private.json'
+    if private.exists():
+        bindings = json.loads(private.read_text())
+    else:
+        bindings = {'password': secrets.token_hex(32)}
+        for name in ['SESSION_SECRET', 'MFA_ENCRYPTION_KEY', 'SECURITY_EVENT_HMAC_KEY']:
+            bindings[name] = base64.b64encode(secrets.token_bytes(32)).decode('ascii')
+        private.write_text(json.dumps(bindings))
+    password = bindings['password']
+    if len(password) != 64 or any(character not in '0123456789abcdef' for character in password):
+        raise RuntimeError('Unrecognized isolated browser credential state')
+    statements = ['CREATE DATABASE IF NOT EXISTS bsa_dev_browser_tests CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;']
+    for identity in ['bsa_dev_browser_migration', 'bsa_dev_browser_runtime']:
+        statements.extend([
+            f"CREATE USER IF NOT EXISTS '{identity}'@'127.0.0.1' IDENTIFIED BY '{password}';",
+            f"ALTER USER '{identity}'@'127.0.0.1' IDENTIFIED BY '{password}';",
+            f"REVOKE ALL PRIVILEGES, GRANT OPTION FROM '{identity}'@'127.0.0.1';",
+        ])
+    statements.append("GRANT ALL PRIVILEGES ON `bsa\\_dev\\_browser\\_tests`.* TO 'bsa_dev_browser_migration'@'127.0.0.1';")
+    execute_sql('\n'.join(statements))
+    lines = ['NODE_ENV=development', 'APP_ENV=development', 'APP_URL=http://localhost:3100', 'MFA_ENCRYPTION_KEY_ID=browser-v1']
+    for key, identity in [('DEV_DATABASE_URL', 'runtime'), ('DEV_DATABASE_MIGRATION_URL', 'migration')]:
+        lines.append(f'{key}=mysql://bsa_dev_browser_{identity}:{password}@127.0.0.1:3308/bsa_dev_browser_tests')
+    lines += [f'{name}={bindings[name]}' for name in ['SESSION_SECRET', 'MFA_ENCRYPTION_KEY', 'SECURITY_EVENT_HMAC_KEY']]
+    filename = state / 'browser.env'
+    filename.write_text('\n'.join(lines) + '\n')
+    filename.chmod(0o600)
+    node = 'node'
+    browser_env = dict(env, NODE_ENV='development', APP_ENV='development')
+    for operation in ['migrate', 'seed']:
+        subprocess.run([node, '--env-file=' + str(filename), str(checkout / 'scripts/database.mjs'), operation], cwd=checkout, env=browser_env, check=True)
+    statements = []
+    for table, privileges in runtime_grants.items():
+        if table == 'installation_state':
+            privileges = 'SELECT'
+        statements.append(f"GRANT {privileges} ON bsa_dev_browser_tests.{table} TO 'bsa_dev_browser_runtime'@'127.0.0.1';")
+    execute_sql('\n'.join(statements))
+    print('Isolated browser fixture schema and restricted runtime ready; private keys remain outside checkout.')
+
 def stop():
     execute_sql('SHUTDOWN;')
     print('Temporary MySQL stopped; private data/configuration retained outside checkout.')
 
 try:
-    commands = {'start': start, 'grants': grant_runtime, 'stop': stop}
+    commands = {'start': start, 'grants': grant_runtime, 'browser': browser_setup, 'stop': stop}
     commands[sys.argv[1]]()
 except Exception:
     # subprocess errors can contain credential-bearing command output: never forward.

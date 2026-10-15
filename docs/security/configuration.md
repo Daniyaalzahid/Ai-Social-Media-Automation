@@ -45,3 +45,10 @@ Never use NEXT_PUBLIC_ for credentials. Validation rejects credential-like publi
 Phase 2B adds no environment names. SECURITY_EVENT_HMAC_KEY is required when the private password-stage service is initialized, not during UI import/build or database-only commands. No session/MFA feature uses its reserved keys yet. CLI bootstrap uses interactive password input, never a password environment variable.
 
 No browser authentication or protected dashboard is claimed in Phase 2B. Database grant restrictions and schema constraints do not replace later MFA/session/CSRF/object-authorization implementations. See the Phase 2A architecture for schema/grant limitations and Phase 2B architecture for restricted authentication and CLI boundaries.
+
+Phase 2C authentication runtime additionally requires existing APP_URL, a canonical
+base64 32-byte SESSION_SECRET and MFA_ENCRYPTION_KEY_ID (1–40 ASCII letters/digits,
+underscore/hyphen). SESSION_SECRET, MFA key and event HMAC key must be independent.
+No new environment names. All secrets remain server-only, optional for build and
+unrelated unit/UI work. See Phase 2C for isolated browser fixture requirements,
+shared unattributed network bucket, Secure cookie and proxy/clock deployment gates.

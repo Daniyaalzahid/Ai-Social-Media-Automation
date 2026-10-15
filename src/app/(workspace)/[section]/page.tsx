@@ -1,3 +1,4 @@
+import { requireWorkspaceIdentity } from '../../../server/auth/web';
 import { notFound } from 'next/navigation';
 import { navigation } from '../../../components/shell/navigation';
 import { Badge } from '../../../components/ui/badge';
@@ -14,6 +15,7 @@ export async function generateMetadata({ params }: { params: Promise<{ section: 
   return { title: navigation.find((item) => item.href === `/${section}`)?.label ?? 'Page not found' };
 }
 export default async function PlaceholderPage({ params }: { params: Promise<{ section: string }> }) {
+  await requireWorkspaceIdentity();
   const { section } = await params;
   const item = navigation.find((entry) => entry.href === `/${section}`);
   if (!item || item.href === '/overview') notFound();
