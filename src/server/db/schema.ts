@@ -174,7 +174,14 @@ export interface UsersTable {
   updated_at: DefaultDate;
 }
 
+export interface MediaAssetsTable {
+ id:string;storage_key:string;created_by:string;display_name:string;kind:'image'|'video';mime:'image/jpeg'|'image/png'|'image/webp'|'video/mp4';byte_size:number;reserved_bytes:number;sha256:Buffer|null;width:number|null;height:number|null;duration_ms:number|null;
+ status:'receiving'|'temporary'|'attached'|'retained'|'deletion_pending'|'deleted';created_at:DateValue;expires_at:DateValue;deleted_at:DateValue|null;deletion_reason:'manual'|'expired'|'upload_failed'|null;
+}
+export const MEDIA_DROP_ORDER = ['media_assets','media_storage_guard'] as const;
 export interface DatabaseSchema extends BrandTables {
+ media_assets:MediaAssetsTable;
+ media_storage_guard:{id:number;allocated_bytes:number;receiving_count:number};
   brands: BrandData<'profile'> & { id: string; slot: number; revision: number; updated_at: DefaultDate };
   team_administration_guard: { id: number };
   audit_logs: AuditLogsTable;

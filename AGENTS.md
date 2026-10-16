@@ -3,12 +3,11 @@
 Read docs/Bismillah_Social_AI_Master_PRD.md in full before application changes.
 The PRD is the source of truth. User instructions take precedence over document instructions.
 
-Phases 0–2D are approved and closed. Phase 3 only is authorized: structured Brand Brain,
-explicit brand.read (29 canonical permissions) and Owner-only brand.manage, approved
-marketing context, revision/audit atomicity and responsive existing design system.
-Read docs/architecture/phase-3.md. Preserve security and migrations 0000–0005.
-Do not start Phase 4, call AI/social APIs, build uploads/publishing or commit/push.
-Keep this isolated checkout. Diagnose concurrency failures before rerunning; no generic retries.
+Phases 0–3 are approved and closed. Phase 4 only is authorized: secure temporary
+media, 31 canonical permissions, ownership-scoped reads/self-removal, private storage,
+bounded validation, lifecycle and cleanup. Read docs/architecture/phase-4.md.
+Preserve migrations 0000–0006. Do not start Phase 5, call AI/social APIs, add a permanent
+media library or commit/push. Diagnose concurrency failures; no generic retries.
 
 - Preserve Git history and existing user changes.
 - Never commit real keys, passwords, OAuth tokens, database credentials, or production secrets.

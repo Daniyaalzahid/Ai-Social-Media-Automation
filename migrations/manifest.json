@@ -26,5 +26,9 @@
   {
     "name": "0006_brand_brain.sql",
     "sha256": "ac785551c2ca5070c2e62de90877788005c8f4a2ff02e5c74bb0cad50c895c37"
+  },
+  {
+    "name": "0007_temporary_media.sql",
+    "sha256": "01495fcf7d3945d951935f807c9f952eb149ef59b8449c9083884c85642a9d4a"
   }
 ]

@@ -22,6 +22,8 @@ server = binary_root / 'usr/sbin/mysqld'
 client = binary_root / 'usr/bin/mysql'
 configuration = state / 'private.json'
 runtime_grants = {
+    'media_assets': 'SELECT, INSERT, UPDATE',
+    'media_storage_guard': 'SELECT, UPDATE',
     'brands': 'SELECT, UPDATE',
     'brand_contacts': 'SELECT, INSERT, UPDATE',
     'brand_locations': 'SELECT, INSERT, UPDATE',
@@ -179,7 +181,7 @@ def browser_setup():
         ])
     statements.append("GRANT ALL PRIVILEGES ON `bsa\\_dev\\_browser\\_tests`.* TO 'bsa_dev_browser_migration'@'127.0.0.1';")
     execute_sql('\n'.join(statements))
-    lines = ['NODE_ENV=development', 'APP_ENV=development', 'APP_URL=http://localhost:3100', 'MFA_ENCRYPTION_KEY_ID=browser-v1']
+    lines = ['NODE_ENV=development', 'APP_ENV=development', 'APP_URL=http://localhost:3100', 'MFA_ENCRYPTION_KEY_ID=browser-v1', 'DEV_MEDIA_STORAGE_ROOT=' + str(state / 'browser-media')]
     for key, identity in [('DEV_DATABASE_URL', 'runtime'), ('DEV_DATABASE_MIGRATION_URL', 'migration')]:
         lines.append(f'{key}=mysql://bsa_dev_browser_{identity}:{password}@127.0.0.1:3308/bsa_dev_browser_tests')
     lines += [f'{name}={bindings[name]}' for name in ['SESSION_SECRET', 'MFA_ENCRYPTION_KEY', 'SECURITY_EVENT_HMAC_KEY']]

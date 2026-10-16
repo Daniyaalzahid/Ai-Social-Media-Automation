@@ -1,4 +1,4 @@
-import { BRAND_DROP_ORDER } from '../../src/server/db/schema';
+import { BRAND_DROP_ORDER,MEDIA_DROP_ORDER } from '../../src/server/db/schema';
 import { hashPassword } from '../../src/server/auth/passwords';
 import { createAccessService, tokenHash } from '../../src/server/auth/access';
 import { encryptMfa, newTotpSecret } from '../../src/server/auth/mfa-crypto';
@@ -17,7 +17,7 @@ import type { DatabaseSchema } from '../../src/server/db/schema';
 import { Migrator, type Migration } from 'kysely/migration';
 import { randomBytes } from 'node:crypto';
 
-const dropOrder = [...BRAND_DROP_ORDER, 'audit_logs', 'security_events', 'mfa_recovery_codes', 'mfa_methods', 'auth_challenges', 'sessions',
+const dropOrder = [...MEDIA_DROP_ORDER,...BRAND_DROP_ORDER, 'audit_logs', 'security_events', 'mfa_recovery_codes', 'mfa_methods', 'auth_challenges', 'sessions',
   'password_reset_tokens', 'invitations', 'team_administration_guard', 'installation_state', 'user_roles', 'role_permissions', 'permissions', 'roles', 'users', 'auth_rate_limits',
   'kysely_migration', 'kysely_migration_lock', 'schema_migration_checksums'] as const;
 function scratch(name: 'bsa_test_clean' | 'bsa_test_recovery') {
@@ -32,9 +32,7 @@ async function clearScratch(db: Kysely<DatabaseSchema>, source: Record<string, s
 
 async function seedLegacyCatalog(db: Kysely<DatabaseSchema>) {
   await seedCatalog(db);
-  const id=canonicalCatalogId('permission','brand.read');
-  await db.deleteFrom('role_permissions').where('permission_id','=',id).execute();
-  await db.deleteFrom('permissions').where('id','=',id).execute();
+  for(const code of ['brand.read','media.read','media.manage']){const id=canonicalCatalogId('permission',code);await db.deleteFrom('role_permissions').where('permission_id','=',id).execute();await db.deleteFrom('permissions').where('id','=',id).execute();}
 }
 
 describe('isolated clean migration and recovery', () => {
@@ -62,7 +60,7 @@ describe('isolated clean migration and recovery', () => {
       expect((await db.selectFrom('auth_challenges').select('purpose').where('id', '=', oldProof).executeTakeFirstOrThrow()).purpose).toBe('login_mfa');
       await db.insertInto('auth_challenges').values({ id: randomUUID(), user_id: userId, purpose: 'password_verified', token_hash: randomBytes(32), auth_version: 1, action_code: 'PASSWORD_VERIFIED', consumed_at: null, revoked_at: null,
         created_at: new Date(), expires_at: new Date(Date.now() + 300000) }).execute();
-      expect((await sql`SELECT name FROM schema_migration_checksums`.execute(db)).rows).toHaveLength(7);
+      expect((await sql`SELECT name FROM schema_migration_checksums`.execute(db)).rows).toHaveLength(8);
       await sql`UPDATE schema_migration_checksums SET sha256=${'0'.repeat(64)} WHERE name='0003_password_verified_challenges.sql'`.execute(db);
       await expect(migrateDatabase(db)).rejects.toThrow('checksum mismatch');
     } finally { await clearScratch(db, source); await migrateDatabase(db); await seedCatalog(db); await handle.close(); }
@@ -157,15 +155,40 @@ describe('isolated clean migration and recovery', () => {
       await migrateDatabase(db);await migrateDatabase(db);
       expect((await oldState())===originalState).toBe(true);expect((await createAccessService(db,key,randomBytes(32),NetworkIdentity.fromSocketAddress('::')).validateSession(raw))!==null).toBe(true);
       expect(await db.selectFrom('users').selectAll().where('id','=',id).executeTakeFirstOrThrow()).toEqual(user);
-      expect(await db.selectFrom('permissions').selectAll().execute()).toHaveLength(29);
+      expect(await db.selectFrom('permissions').selectAll().execute()).toHaveLength(31);
       const permission=canonicalCatalogId('permission','brand.read');
       const after=await db.selectFrom('role_permissions').selectAll().orderBy('role_id').orderBy('permission_id').execute();
-      expect(after.filter((r)=>r.permission_id!==permission)).toEqual(before);
+      expect(after.filter((r)=>![permission,canonicalCatalogId('permission','media.read'),canonicalCatalogId('permission','media.manage')].includes(r.permission_id))).toEqual(before);
       expect(after.filter((r)=>r.permission_id===permission).map((r)=>r.role_id).sort()).toEqual(['OWNER','MARKETING_ADMIN','CONTENT_CREATOR','REVIEWER'].map((r)=>canonicalCatalogId('role',r)).sort());
       const seeded=await db.selectFrom('brand_claims').selectAll().execute();expect(seeded).toHaveLength(13);const {z}=await import('zod');expect(seeded.every((row)=>z.uuid().safeParse(row.id).success)).toBe(true);
       const snapshot=await db.selectFrom('brands').selectAll().execute();await seedCatalog(db);await seedCatalog(db);expect(await db.selectFrom('brands').selectAll().execute()).toEqual(snapshot);
       await sql`UPDATE schema_migration_checksums SET sha256=${'0'.repeat(64)} WHERE name='0006_brand_brain.sql'`.execute(db);
       await expect(migrateDatabase(db)).rejects.toThrow('checksum mismatch');
+    }finally{await clearScratch(db,source);await migrateDatabase(db);await seedCatalog(db);await handle.close();}
+  });
+  it('upgrades exact Phase 3 to 0007, preserves records/grants and rejects new checksum tampering', async () => {
+    const {source,handle}=scratch('bsa_test_clean'),db=handle.db;
+    try{
+      await clearScratch(db,source);
+      await sql`CREATE TABLE schema_migration_checksums(name varchar(150) PRIMARY KEY,sha256 char(64) NOT NULL,state enum('applying','applied') NOT NULL) ENGINE=InnoDB`.execute(db);
+      const entries=(await readMigrations()).slice(0,7);
+      const migrations:Record<string,Migration>=Object.fromEntries(entries.map(entry=>[entry.name,{up:async(c)=>{
+        await sql`INSERT INTO schema_migration_checksums(name,sha256,state) VALUES(${entry.name},${entry.sha256},'applying')`.execute(c);
+        for(const statement of entry.statements)await sql.raw(statement).execute(c);
+        await sql`UPDATE schema_migration_checksums SET state='applied' WHERE name=${entry.name}`.execute(c);
+      }}]));
+      expect((await new Migrator({db,provider:{getMigrations:async()=>migrations}}).migrateToLatest()).error===undefined).toBe(true);
+      await seedCatalog(db);for(const code of ['media.read','media.manage']){const id=canonicalCatalogId('permission',code);await db.deleteFrom('role_permissions').where('permission_id','=',id).execute();await db.deleteFrom('permissions').where('id','=',id).execute();}
+      const before=await db.selectFrom('role_permissions').selectAll().orderBy('role_id').orderBy('permission_id').execute(),id=randomUUID();
+      await db.insertInto('users').values({id,email_normalized:id+'@example.test',display_name:'Phase 3 preserved',status:'invited',password_hash:null,password_changed_at:null,last_login_at:null}).execute();
+      const users=await db.selectFrom('users').selectAll().execute(),brand=await db.selectFrom('brands').selectAll().execute();
+      await migrateDatabase(db);await migrateDatabase(db);
+      expect(await db.selectFrom('users').selectAll().execute()).toEqual(users);expect(await db.selectFrom('brands').selectAll().execute()).toEqual(brand);
+      expect(await db.selectFrom('permissions').selectAll().execute()).toHaveLength(31);
+      const added=['media.read','media.manage'].map(code=>canonicalCatalogId('permission',code));
+      expect((await db.selectFrom('role_permissions').selectAll().orderBy('role_id').orderBy('permission_id').execute()).filter(r=>!added.includes(r.permission_id))).toEqual(before);
+      expect(await db.selectFrom('media_assets').select('id').execute()).toEqual([]);
+      await sql`UPDATE schema_migration_checksums SET sha256=${'0'.repeat(64)} WHERE name='0007_temporary_media.sql'`.execute(db);await expect(migrateDatabase(db)).rejects.toThrow('checksum mismatch');
     }finally{await clearScratch(db,source);await migrateDatabase(db);await seedCatalog(db);await handle.close();}
   });
   it('migrates a completely clean database and permits a repeat without changes', async () => {

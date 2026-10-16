@@ -376,3 +376,8 @@ progress::-moz-progress-bar { background: var(--brand-primary); }
 .brand-form-grid > div, .brand-form-grid fieldset { min-width: 0; }
 .brand-choices { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .brand-editor { scroll-margin-top: 80px; }
+
+.media-card { min-width: 0; }
+.media-card h2, .media-card p { overflow-wrap: anywhere; }
+.media-card img, .media-card video { display: block; max-width: 100%; max-height: 360px; object-fit: contain; margin-block: var(--space-3); }
+#media-upload { max-width: 100%; }
