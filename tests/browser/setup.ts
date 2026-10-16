@@ -27,6 +27,10 @@ export default async function setup() {
       if (!/^GRANT USAGE ON \*\.\*/.test(value) && !value.includes('`bsa\\_dev\\_browser\\_tests`')) throw new Error('Unsafe browser fixture grants');
     }
     await migrateDatabase(handle.db); await seedCatalog(handle.db);
+    // This guarded, disposable browser schema owns the AI fixtures. Previous
+    // runs must not consume this run's global AI quota or crash-lease slots.
+    await handle.db.deleteFrom('ai_generations').execute();
+    await handle.db.deleteFrom('auth_rate_limits').where('scope','in',['ai_global_day','ai_actor_day','ai_actor_minute']).execute();
     const password = randomBytes(32).toString('hex'), encoded = await hashPassword(password);
     const fixtures = [];
     for (const role of ['VIEWER', 'VIEWER', 'VIEWER', 'VIEWER', 'VIEWER', 'VIEWER', 'VIEWER', 'OWNER', 'MARKETING_ADMIN']) {

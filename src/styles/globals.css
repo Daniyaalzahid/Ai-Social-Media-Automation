@@ -381,3 +381,5 @@ progress::-moz-progress-bar { background: var(--brand-primary); }
 .media-card h2, .media-card p { overflow-wrap: anywhere; }
 .media-card img, .media-card video { display: block; max-width: 100%; max-height: 360px; object-fit: contain; margin-block: var(--space-3); }
 #media-upload { max-width: 100%; }
+
+.ai-copy { white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -71,11 +71,12 @@ test('tabs and dialog support keyboard interaction in a real browser', async ({ 
 });
 
 test('all navigation placeholders and error previews render without live services', async ({ page }) => {
-  for (const route of ['create-post', 'calendar', 'content', 'approvals', 'analytics', 'connections', 'activity', 'settings']) {
+  for (const route of ['calendar', 'content', 'approvals', 'analytics', 'connections', 'activity', 'settings']) {
     const response = await page.goto(`/${route}`);
     expect(response?.status()).toBe(200);
     await expect(page.getByText('UI placeholder')).toBeVisible();
   }
+  await page.goto('/create-post'); await expect(page.getByRole('heading',{name:'Generate platform drafts',exact:true})).toBeVisible();
   await page.goto('/media'); await expect(page.getByRole('heading',{name:'Temporary media',exact:true})).toBeVisible();
   await page.goto('/brand-brain'); await expect(page.getByRole('heading', { name: 'Brand Brain', exact: true })).toBeVisible();
   await page.goto('/team'); await expect(page.getByRole('heading', { name: 'Team', exact: true })).toBeVisible();

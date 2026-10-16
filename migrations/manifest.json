@@ -30,5 +30,9 @@
   {
     "name": "0007_temporary_media.sql",
     "sha256": "01495fcf7d3945d951935f807c9f952eb149ef59b8449c9083884c85642a9d4a"
+  },
+  {
+    "name": "0008_ai_generations.sql",
+    "sha256": "d081f12d4575f5b9b1092fada7d761445f6dcaff90c364b0cd0d3f4566e0c7f1"
   }
 ]

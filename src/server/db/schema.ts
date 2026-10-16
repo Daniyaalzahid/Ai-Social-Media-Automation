@@ -179,7 +179,13 @@ export interface MediaAssetsTable {
  status:'receiving'|'temporary'|'attached'|'retained'|'deletion_pending'|'deleted';created_at:DateValue;expires_at:DateValue;deleted_at:DateValue|null;deletion_reason:'manual'|'expired'|'upload_failed'|null;
 }
 export const MEDIA_DROP_ORDER = ['media_assets','media_storage_guard'] as const;
+export const AI_DROP_ORDER = ['ai_generations','ai_generation_guard'] as const;
+export interface AiGenerationsTable {
+ id:string;created_by:string;request_id:string;input_digest:Buffer;brand_id:string;brand_revision:number;provider:string;model:string;prompt_version:string;platforms_json:ColumnType<unknown,string,string>;provenance_json:ColumnType<unknown,string,string>;language:'ENGLISH'|'URDU'|'ROMAN_URDU'|'MIXED';status:'IN_PROGRESS'|'COMPLETED'|'FAILED'|'REJECTED';failure:import('../../features/ai/model').AiFailure|null;output_json:ColumnType<unknown,string|null,string|null>;usage_json:ColumnType<unknown,string|null,string|null>;created_at:DateValue;lease_expires_at:DateValue;completed_at:DateValue|null;
+}
 export interface DatabaseSchema extends BrandTables {
+ ai_generations:AiGenerationsTable;
+ ai_generation_guard:{id:number};
  media_assets:MediaAssetsTable;
  media_storage_guard:{id:number;allocated_bytes:number;receiving_count:number};
   brands: BrandData<'profile'> & { id: string; slot: number; revision: number; updated_at: DefaultDate };

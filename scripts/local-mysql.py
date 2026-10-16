@@ -22,6 +22,8 @@ server = binary_root / 'usr/sbin/mysqld'
 client = binary_root / 'usr/bin/mysql'
 configuration = state / 'private.json'
 runtime_grants = {
+    'ai_generations': 'SELECT, INSERT, UPDATE',
+    'ai_generation_guard': 'SELECT, UPDATE',
     'media_assets': 'SELECT, INSERT, UPDATE',
     'media_storage_guard': 'SELECT, UPDATE',
     'brands': 'SELECT, UPDATE',

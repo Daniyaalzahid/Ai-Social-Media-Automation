@@ -25,6 +25,7 @@ export default defineConfig({
     url: 'http://localhost:3100',
     reuseExistingServer: false,
     timeout: 60_000,
-    env: { NODE_ENV: 'development', APP_ENV: 'development', NEXT_TELEMETRY_DISABLED: '1' },
+    // Required browser suites must never consume an inherited real AI credential.
+    env: { NODE_ENV: 'development', APP_ENV: 'development', NEXT_TELEMETRY_DISABLED: '1', OPENROUTER_API_KEY:'', OPENROUTER_MODEL:'' },
   },
 });
