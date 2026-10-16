@@ -184,6 +184,15 @@ export interface AiGenerationsTable {
  id:string;created_by:string;request_id:string;input_digest:Buffer;brand_id:string;brand_revision:number;provider:string;model:string;prompt_version:string;platforms_json:ColumnType<unknown,string,string>;provenance_json:ColumnType<unknown,string,string>;language:'ENGLISH'|'URDU'|'ROMAN_URDU'|'MIXED';status:'IN_PROGRESS'|'COMPLETED'|'FAILED'|'REJECTED';failure:import('../../features/ai/model').AiFailure|null;output_json:ColumnType<unknown,string|null,string|null>;usage_json:ColumnType<unknown,string|null,string|null>;created_at:DateValue;lease_expires_at:DateValue;completed_at:DateValue|null;
 }
 export interface DatabaseSchema extends BrandTables {
+ content_items:{id:string;created_by:string;assigned_to:string;revision_sequence:number;created_at:DateValue};
+ content_revisions:{id:string;post_id:string;sequence:number;created_by:string;request_id:string;request_digest:Buffer;title:string;language:'ENGLISH'|'URDU'|'ROMAN_URDU'|'MIXED';source:'MANUAL'|'HUMAN_EDITED'|'AI_GENERATED'|'AI_EDITED';generation_id:string|null;generation_provider:string|null;generation_model:string|null;generation_brand_revision:number|null;brand_revision:number;validated:number;created_at:DateValue};
+ content_variants:{revision_id:string;platform:'FACEBOOK'|'INSTAGRAM'|'TIKTOK'|'YOUTUBE'|'LINKEDIN';content_json:ColumnType<unknown,string,string>};
+ content_revision_authors:{post_id:string;revision_id:string;user_id:string;authored_revision_id:string};
+ content_revision_facts:{revision_id:string;category:import('../../features/brand/model').ContextData<'claims'>['category'];source:import('../../features/content/model').FactSnapshot['source'];source_record_id:string|null;resolved_value:string};
+ content_revision_media:{revision_id:string;media_id:string;position:number};
+ content_submissions:{id:string;post_id:string;revision_id:string;submitted_by:string;request_id:string;state:'PENDING'|'APPROVED'|'CHANGES_REQUESTED'|'REJECTED';submitted_at:DateValue;validation_brand_revision:number};
+ content_decisions:{id:string;submission_id:string;post_id:string;revision_id:string;decided_by:string;request_id:string;decision:'APPROVED'|'CHANGES_REQUESTED'|'REJECTED';note:string;self_approval:number;brand_revision:number;created_at:DateValue};
+ content_media_protection:{media_id:string;protected_until:DateValue};
  ai_generations:AiGenerationsTable;
  ai_generation_guard:{id:number};
  media_assets:MediaAssetsTable;
@@ -206,3 +215,5 @@ export interface DatabaseSchema extends BrandTables {
   user_roles: UserRolesTable;
   users: UsersTable;
 }
+
+export const CONTENT_DROP_ORDER=['content_media_protection','content_decisions','content_submissions','content_revision_media','content_revision_facts','content_revision_authors','content_variants','content_revisions','content_items'] as const;

@@ -22,6 +22,15 @@ server = binary_root / 'usr/sbin/mysqld'
 client = binary_root / 'usr/bin/mysql'
 configuration = state / 'private.json'
 runtime_grants = {
+    'content_items': 'SELECT, INSERT, UPDATE (revision_sequence)',
+    'content_revisions': 'SELECT, INSERT',
+    'content_variants': 'SELECT, INSERT',
+    'content_revision_authors': 'SELECT, INSERT',
+    'content_revision_facts': 'SELECT, INSERT',
+    'content_revision_media': 'SELECT, INSERT',
+    'content_submissions': 'SELECT, INSERT, UPDATE (state)',
+    'content_decisions': 'SELECT, INSERT',
+    'content_media_protection': 'SELECT, INSERT, UPDATE (protected_until)',
     'ai_generations': 'SELECT, INSERT, UPDATE',
     'ai_generation_guard': 'SELECT, UPDATE',
     'media_assets': 'SELECT, INSERT, UPDATE',

@@ -383,3 +383,8 @@ progress::-moz-progress-bar { background: var(--brand-primary); }
 #media-upload { max-width: 100%; }
 
 .ai-copy { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.content-fact { padding-block: var(--space-3); border-bottom: 1px solid var(--border); }
+.team-stack fieldset { min-width: 0; }
+.team-stack textarea, .team-stack input:not([type=checkbox]), .team-stack select { max-width: 100%; box-sizing: border-box; }
+.team-stack article { overflow-wrap: anywhere; }

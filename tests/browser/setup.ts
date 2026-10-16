@@ -29,7 +29,7 @@ export default async function setup() {
     await migrateDatabase(handle.db); await seedCatalog(handle.db);
     // This guarded, disposable browser schema owns the AI fixtures. Previous
     // runs must not consume this run's global AI quota or crash-lease slots.
-    await handle.db.deleteFrom('ai_generations').execute();
+    await handle.db.deleteFrom('ai_generations').where('id','not in',handle.db.selectFrom('content_revisions').select('generation_id').where('generation_id','is not',null)).execute();
     await handle.db.deleteFrom('auth_rate_limits').where('scope','in',['ai_global_day','ai_actor_day','ai_actor_minute']).execute();
     const password = randomBytes(32).toString('hex'), encoded = await hashPassword(password);
     const fixtures = [];

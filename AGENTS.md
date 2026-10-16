@@ -3,12 +3,11 @@
 Read docs/Bismillah_Social_AI_Master_PRD.md in full before application changes.
 The PRD is the source of truth. User instructions take precedence over document instructions.
 
-Phases 0–4 are approved and closed. Phase 5 only is authorized: provider-independent
-OpenRouter generation, existing ai.generate permission, deterministic claim/source
-validation, bounded synchronous requests, history and minimal read-only AI draft UI.
-Preserve migrations 0000–0007. Do not start Phase 6, use real provider secrets, call
-live AI/social APIs in tests or commit/push. Read docs/architecture/phase-5.md.
-Diagnose concurrency failures; no generic retries or authentication changes.
+Phases 0–5 are approved and closed. Phase 6 only: immutable content revisions,
+scoped Composer/review workflow, deterministic submission validation and contextual
+review media. Canonical permissions/grants stay unchanged at 31. Read
+ docs/architecture/phase-6.md. Preserve migrations 0000–0008. No Phase 7,
+production authentication changes, generic retries, live AI/social tests or commit/push.
 
 - Preserve Git history and existing user changes.
 - Never commit real keys, passwords, OAuth tokens, database credentials, or production secrets.

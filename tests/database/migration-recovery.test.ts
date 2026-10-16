@@ -1,4 +1,4 @@
-import { BRAND_DROP_ORDER,MEDIA_DROP_ORDER,AI_DROP_ORDER } from '../../src/server/db/schema';
+import { BRAND_DROP_ORDER,MEDIA_DROP_ORDER,AI_DROP_ORDER,CONTENT_DROP_ORDER } from '../../src/server/db/schema';
 import { hashPassword } from '../../src/server/auth/passwords';
 import { createAccessService, tokenHash } from '../../src/server/auth/access';
 import { encryptMfa, newTotpSecret } from '../../src/server/auth/mfa-crypto';
@@ -17,7 +17,7 @@ import type { DatabaseSchema } from '../../src/server/db/schema';
 import { Migrator, type Migration } from 'kysely/migration';
 import { randomBytes } from 'node:crypto';
 
-const dropOrder = [...AI_DROP_ORDER,...MEDIA_DROP_ORDER,...BRAND_DROP_ORDER, 'audit_logs', 'security_events', 'mfa_recovery_codes', 'mfa_methods', 'auth_challenges', 'sessions',
+const dropOrder = [...CONTENT_DROP_ORDER,...AI_DROP_ORDER,...MEDIA_DROP_ORDER,...BRAND_DROP_ORDER, 'audit_logs', 'security_events', 'mfa_recovery_codes', 'mfa_methods', 'auth_challenges', 'sessions',
   'password_reset_tokens', 'invitations', 'team_administration_guard', 'installation_state', 'user_roles', 'role_permissions', 'permissions', 'roles', 'users', 'auth_rate_limits',
   'kysely_migration', 'kysely_migration_lock', 'schema_migration_checksums'] as const;
 function scratch(name: 'bsa_test_clean' | 'bsa_test_recovery') {
@@ -60,7 +60,7 @@ describe('isolated clean migration and recovery', () => {
       expect((await db.selectFrom('auth_challenges').select('purpose').where('id', '=', oldProof).executeTakeFirstOrThrow()).purpose).toBe('login_mfa');
       await db.insertInto('auth_challenges').values({ id: randomUUID(), user_id: userId, purpose: 'password_verified', token_hash: randomBytes(32), auth_version: 1, action_code: 'PASSWORD_VERIFIED', consumed_at: null, revoked_at: null,
         created_at: new Date(), expires_at: new Date(Date.now() + 300000) }).execute();
-      expect((await sql`SELECT name FROM schema_migration_checksums`.execute(db)).rows).toHaveLength(9);
+      expect((await sql`SELECT name FROM schema_migration_checksums`.execute(db)).rows).toHaveLength(10);
       await sql`UPDATE schema_migration_checksums SET sha256=${'0'.repeat(64)} WHERE name='0003_password_verified_challenges.sql'`.execute(db);
       await expect(migrateDatabase(db)).rejects.toThrow('checksum mismatch');
     } finally { await clearScratch(db, source); await migrateDatabase(db); await seedCatalog(db); await handle.close(); }
@@ -211,6 +211,29 @@ describe('isolated clean migration and recovery', () => {
       expect(await db.selectFrom('users').selectAll().execute()).toEqual(users);expect(await db.selectFrom('media_assets').selectAll().execute()).toEqual(media);expect(await db.selectFrom('role_permissions').selectAll().orderBy('role_id').orderBy('permission_id').execute()).toEqual(grants);
       expect(await db.selectFrom('permissions').select('id').execute()).toHaveLength(31);expect(await db.selectFrom('ai_generations').selectAll().execute()).toEqual([]);
       await sql`UPDATE schema_migration_checksums SET sha256=${'0'.repeat(64)} WHERE name='0008_ai_generations.sql'`.execute(db);await expect(migrateDatabase(db)).rejects.toThrow('checksum mismatch');
+    }finally{await clearScratch(db,source);await migrateDatabase(db);await seedCatalog(db);await handle.close();}
+  });
+  it('upgrades exact Phase 5 through 0009, preserves identities/media/AI/grants and rejects tampering',async()=>{
+    const {source,handle}=scratch('bsa_test_clean'),db=handle.db;
+    try{
+      await clearScratch(db,source);
+      await sql`CREATE TABLE schema_migration_checksums(name varchar(150) PRIMARY KEY,sha256 char(64) NOT NULL,state enum('applying','applied') NOT NULL) ENGINE=InnoDB`.execute(db);
+      const entries=(await readMigrations()).slice(0,9);
+      const migrations:Record<string,Migration>=Object.fromEntries(entries.map(entry=>[entry.name,{up:async(c)=>{
+        await sql`INSERT INTO schema_migration_checksums(name,sha256,state) VALUES(${entry.name},${entry.sha256},'applying')`.execute(c);
+        for(const statement of entry.statements)await sql.raw(statement).execute(c);
+        await sql`UPDATE schema_migration_checksums SET state='applied' WHERE name=${entry.name}`.execute(c);
+      }}]));
+      expect((await new Migrator({db,provider:{getMigrations:async()=>migrations}}).migrateToLatest()).error===undefined).toBe(true);
+      await seedCatalog(db);const id=randomUUID(),time=new Date();
+      await db.insertInto('users').values({id,email_normalized:id+'@example.test',display_name:'Phase 5 preserved',status:'invited',password_hash:null,password_changed_at:null,last_login_at:null}).execute();
+      await db.insertInto('media_assets').values({id:randomUUID(),created_by:id,storage_key:randomBytes(32).toString('hex'),display_name:'preserved.png',kind:'image',mime:'image/png',byte_size:0,reserved_bytes:8388608,sha256:null,width:null,height:null,duration_ms:null,status:'receiving',created_at:time,expires_at:new Date(+time+1800000),deleted_at:null,deletion_reason:null}).execute();
+      await db.insertInto('ai_generations').values({id:randomUUID(),created_by:id,request_id:randomUUID(),input_digest:randomBytes(32),brand_id:'6f8d30ea-7492-4eae-873a-a844a3636a01',brand_revision:1,provider:'openrouter',model:'test/model:free',prompt_version:'social-safe-assembly-v1',platforms_json:'["FACEBOOK"]',provenance_json:'[]',language:'ENGLISH',status:'FAILED',failure:'PROVIDER_UNAVAILABLE',output_json:null,usage_json:null,created_at:time,lease_expires_at:new Date(+time+45000),completed_at:time}).execute();
+      const users=await db.selectFrom('users').selectAll().execute(),media=await db.selectFrom('media_assets').selectAll().execute(),ai=await db.selectFrom('ai_generations').selectAll().execute(),grants=await db.selectFrom('role_permissions').selectAll().orderBy('role_id').orderBy('permission_id').execute();
+      await migrateDatabase(db);await migrateDatabase(db);
+      expect(await db.selectFrom('users').selectAll().execute()).toEqual(users);expect(await db.selectFrom('media_assets').selectAll().execute()).toEqual(media);expect(await db.selectFrom('ai_generations').selectAll().execute()).toEqual(ai);expect(await db.selectFrom('role_permissions').selectAll().orderBy('role_id').orderBy('permission_id').execute()).toEqual(grants);
+      expect(await db.selectFrom('permissions').select('id').execute()).toHaveLength(31);expect(await db.selectFrom('content_items').selectAll().execute()).toEqual([]);
+      await sql`UPDATE schema_migration_checksums SET sha256=${'0'.repeat(64)} WHERE name='0009_content_workflow.sql'`.execute(db);await expect(migrateDatabase(db)).rejects.toThrow('checksum mismatch');
     }finally{await clearScratch(db,source);await migrateDatabase(db);await seedCatalog(db);await handle.close();}
   });
   it('migrates a completely clean database and permits a repeat without changes', async () => {

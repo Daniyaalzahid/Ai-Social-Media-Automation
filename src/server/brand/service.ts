@@ -77,6 +77,10 @@ async function audit(tx: Kysely<DatabaseSchema>, actorId:string, sessionId:strin
   const metadata=JSON.stringify({reasonCode:`brand.${kind}.${operation}`,changedFields:[`record:${id}`],count:revision});
   await tx.insertInto('audit_logs').values({id:randomUUID(),actor_user_id:actorId,target_user_id:null,session_id:sessionId,action:`brand.${kind}.${operation}`,outcome:'success',correlation_id:randomUUID(),metadata_safe_json:metadata,ip_hash:null}).execute();
 }
+/** Content validation only: caller already holds a current actor in its transaction. */
+export async function contentBrandSnapshot(tx:Kysely<DatabaseSchema>,actor:import('../authorization/authorization').AuthorizationContext){
+ requirePermission(actor,'brand.read');return snapshot(tx,false);
+}
 export function createBrandService(db:Kysely<DatabaseSchema>) {
   async function transaction<T>(fn:(tx:Kysely<DatabaseSchema>)=>Promise<T>) {
     try{return await db.transaction().execute(fn);}catch(error){if(error instanceof AuthorizationError || error instanceof BrandError)throw error;throw new SecurityOperationError();}

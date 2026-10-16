@@ -6,6 +6,7 @@ import { createDatabase } from '../../src/server/db/connection';
 import { migrateDatabase } from '../../src/server/db/migrations';
 import { seedCatalog } from '../../src/server/db/seeds';
 import { assertDestructiveTestDatabase } from '../../src/server/db/test-guard';
+import { scratchDatabase, resetScratch } from './phase2b-helpers';
 import { PERMISSION_CODES, ROLE_CODES, ROLE_PERMISSIONS } from '../../src/server/db/catalog';
 import type { DatabaseSchema } from '../../src/server/db/schema';
 
@@ -45,12 +46,12 @@ beforeAll(async () => {
 afterAll(async () => { await runtime.close(); await handle.close(); });
 
 describe('real MySQL security foundation', () => {
-  it('creates 35 application tables on real MySQL with enforced checks and explicit InnoDB', async () => {
+  it('creates 44 application tables on real MySQL with enforced checks and explicit InnoDB', async () => {
     const version = await sql<{ version: string }>`SELECT VERSION() AS version`.execute(db);
     expect(version.rows[0]?.version).toMatch(/^8\./);
     const tables = await sql<{ name: string; engine: string; collation: string }>`SELECT TABLE_NAME AS name, ENGINE AS engine, TABLE_COLLATION AS collation FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()`.execute(db);
     const security = tables.rows.filter((row) => !row.name.startsWith('kysely_') && row.name !== 'schema_migration_checksums');
-    expect(security).toHaveLength(35);
+    expect(security).toHaveLength(44);
     expect(security.every((row) => row.engine === 'InnoDB' && row.collation === 'utf8mb4_bin')).toBe(true);
   });
   it('initial Brand Brain claim IDs are valid UUIDs and approved context is readable', async () => {
@@ -62,7 +63,7 @@ describe('real MySQL security foundation', () => {
     await migrateDatabase(db);
     expect(await db.selectFrom('installation_state').selectAll().execute()).toHaveLength(1);
     const ledger = await sql<{ state: string }>`SELECT state FROM schema_migration_checksums`.execute(db);
-    expect(ledger.rows).toHaveLength(9);
+    expect(ledger.rows).toHaveLength(10);
     expect(ledger.rows.every((row) => row.state === 'applied')).toBe(true);
   });
   it('sets the server connection timezone to UTC for SQL defaults', async () => {
@@ -80,9 +81,15 @@ describe('real MySQL security foundation', () => {
     }
   });
   it('does not seed users, passwords, MFA material or sessions', async () => {
-    expect(await db.selectFrom('users').select('id').execute()).toHaveLength(0);
-    expect(await db.selectFrom('sessions').select('id').execute()).toHaveLength(0);
-    expect(await db.selectFrom('mfa_methods').select('id').execute()).toHaveLength(0);
+    // This test owns a guarded scratch installation, independent of primary
+    // runtime fixtures and file order. Never filter or delete shared users.
+    const clean=scratchDatabase('bsa_test_clean');
+    try{
+      expect(resolveDatabaseConfiguration(clean.source,'destructive-test').database).not.toBe(config.database);
+      await resetScratch(clean);await seedCatalog(clean.handle.db);
+      for(const table of ['users','sessions','mfa_methods','mfa_recovery_codes','auth_challenges'] as const)
+        expect(await clean.handle.db.selectFrom(table).select('id').execute()).toHaveLength(0);
+    }finally{await clean.handle.close();}
   });
   it('enforces one operational role per user', () => isolated(async (transaction) => {
     const id = await user(transaction);
