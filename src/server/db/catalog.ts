@@ -6,15 +6,15 @@ export const PERMISSION_CODES = [
   'content.submit', 'content.review', 'content.approve', 'content.approve_self', 'content.schedule', 'content.publish',
   'integrations.manage', 'brand.manage', 'settings.manage', 'security.manage', 'audit.read',
   'users.manage', 'roles.assign', 'password_reset.issue', 'sessions.revoke_any',
-  'password.change_own', 'sessions.manage_own', 'mfa.manage_own', 'brand.read', 'media.read', 'media.manage',
+  'password.change_own', 'sessions.manage_own', 'mfa.manage_own', 'brand.read', 'media.read', 'media.manage', 'integrations.read',
 ] as const;
 export type PermissionCode = typeof PERMISSION_CODES[number];
 const own: readonly PermissionCode[] = ['workspace.read', 'password.change_own', 'sessions.manage_own', 'mfa.manage_own'];
 const read: readonly PermissionCode[] = ['content.read', 'calendar.read'];
 export const ROLE_PERMISSIONS: Readonly<Record<RoleCode, readonly PermissionCode[]>> = {
   OWNER: PERMISSION_CODES,
-  MARKETING_ADMIN: [...own, ...read, 'brand.read', 'media.read', 'media.manage', 'analytics.read', 'publishing_logs.read', 'content.create', 'media.upload', 'ai.generate', 'content.edit_any', 'content.submit', 'content.review', 'content.approve', 'content.approve_self', 'content.schedule', 'content.publish'],
-  CONTENT_CREATOR: [...own, ...read, 'brand.read', 'media.read', 'content.create', 'media.upload', 'ai.generate', 'content.edit_assigned', 'content.submit'],
+  MARKETING_ADMIN: [...own, ...read, 'integrations.read', 'integrations.manage', 'brand.read', 'media.read', 'media.manage', 'analytics.read', 'publishing_logs.read', 'content.create', 'media.upload', 'ai.generate', 'content.edit_any', 'content.submit', 'content.review', 'content.approve', 'content.approve_self', 'content.schedule', 'content.publish'],
+  CONTENT_CREATOR: [...own, ...read, 'integrations.read', 'brand.read', 'media.read', 'content.create', 'media.upload', 'ai.generate', 'content.edit_assigned', 'content.submit'],
   REVIEWER: [...own, ...read, 'brand.read', 'content.review', 'content.approve'],
   VIEWER: [...own, ...read, 'analytics.read'],
 };

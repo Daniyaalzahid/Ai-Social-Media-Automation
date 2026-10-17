@@ -66,7 +66,7 @@ describe('canonical source/count ambiguity at the projection boundary',()=>{
 describe('frozen Phase 2D canonical permission baseline',()=>{
  it('preserves all previous roles/28 permissions/grants and adds only four explicit read grants',async()=>{
   const legacy=(await import('../fixtures/phase-2d-catalog.json')).default;const {ROLE_CODES,ROLE_PERMISSIONS,PERMISSION_CODES}=await import('../../src/server/db/catalog');
-  expect(legacy.base).toBe('974503822f98ca180e4704a756e44c6902b15816');expect(ROLE_CODES).toEqual(legacy.roles);expect(PERMISSION_CODES).toHaveLength(31);expect(PERMISSION_CODES.filter(p=>!['brand.read','media.read','media.manage'].includes(p))).toEqual(legacy.permissions);
-  for(const role of ROLE_CODES){expect(ROLE_PERMISSIONS[role].filter(p=>!['brand.read','media.read','media.manage'].includes(p))).toEqual(legacy.grants[role]);expect(ROLE_PERMISSIONS[role].includes('brand.read')).toBe(role!=='VIEWER');expect(ROLE_PERMISSIONS[role].includes('brand.manage')).toBe(role==='OWNER');}
+  expect(legacy.base).toBe('974503822f98ca180e4704a756e44c6902b15816');expect(ROLE_CODES).toEqual(legacy.roles);expect(PERMISSION_CODES).toHaveLength(32);expect(PERMISSION_CODES.filter(p=>!['brand.read','media.read','media.manage','integrations.read'].includes(p))).toEqual(legacy.permissions);
+  for(const role of ROLE_CODES){expect(ROLE_PERMISSIONS[role].filter(p=>!['brand.read','media.read','media.manage','integrations.read'].includes(p)&&!(role==='MARKETING_ADMIN'&&p==='integrations.manage'))).toEqual(legacy.grants[role]);expect(ROLE_PERMISSIONS[role].includes('brand.read')).toBe(role!=='VIEWER');expect(ROLE_PERMISSIONS[role].includes('brand.manage')).toBe(role==='OWNER');}
  });
 });

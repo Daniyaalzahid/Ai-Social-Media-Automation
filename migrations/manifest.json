@@ -38,5 +38,9 @@
   {
     "name": "0009_content_workflow.sql",
     "sha256": "f4c21f84c2127f6cced5d881151709fd4df55424f3a43b72d04f6efaa0fc0782"
+  },
+  {
+    "name": "0010_social_connections.sql",
+    "sha256": "b846788569ed44c9d8d4e84654fd2d3b9cbacbbf84fb51924a5302470b2b2cce"
   }
 ]

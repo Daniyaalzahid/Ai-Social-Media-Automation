@@ -2,6 +2,8 @@ import type { NextConfig } from 'next';
 
 const config: NextConfig = {
   poweredByHeader: false,
+  // OAuth callback query strings contain one-use credentials even in development.
+  logging: { incomingRequests: { ignore: [/\/api\/oauth\//] } },
   // Preserve Flight headers for the early RSC denial check; route/page guards remain authoritative.
   skipProxyUrlNormalize: true,
   experimental: { authInterrupts: true },
@@ -15,7 +17,7 @@ const config: NextConfig = {
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
       { key: 'X-Frame-Options', value: 'DENY' },
       { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
-    ] }];
+    ] }, { source: '/api/oauth/:provider/callback', headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }] }];
   },
 };
 export default config;

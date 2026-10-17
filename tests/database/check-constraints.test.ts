@@ -1,3 +1,4 @@
+import {foundationTables,check,foreignKey,installedChecks,installedForeignKeys,sortContracts} from '../helpers/schema-contract';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { sql, type Kysely } from 'kysely';
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
@@ -87,9 +88,46 @@ describe('direct MySQL enforcement of every security CHECK', () => {
     await expect(statement.execute(transaction)).rejects.toMatchObject({ code: 'ER_CHECK_CONSTRAINT_VIOLATED', sqlMessage: expect.stringContaining(name) });
   }));
   it('covers exactly every CHECK currently installed in the security schema', async () => {
-    const constraints = await sql<{ name: string; enforced: string }>`SELECT CONSTRAINT_NAME AS name, ENFORCED AS enforced FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND CONSTRAINT_TYPE='CHECK' AND TABLE_NAME NOT LIKE 'brand%' AND TABLE_NAME NOT LIKE 'media%' AND TABLE_NAME NOT LIKE 'ai%' AND TABLE_NAME NOT LIKE 'content%'`.execute(db);
-    expect(constraints.rows.every((row) => row.enforced === 'YES')).toBe(true);
-    expect(constraints.rows.map((row) => row.name).sort()).toEqual(cases.map(([name]) => name).sort());
+    const expected=[
+      check('audit_logs','audit_logs_ip_hash_length',['ip_hash']),
+      check('audit_logs','audit_logs_metadata_keys',['metadata_safe_json']),
+      check('auth_challenges','auth_challenges_expiry',['created_at', 'expires_at']),
+      check('auth_challenges','auth_challenges_auth_version_positive',['auth_version']),
+      check('auth_challenges','auth_challenges_token_hash_length',['token_hash']),
+      check('auth_challenges','auth_challenges_lifecycle',['created_at', 'expires_at', 'consumed_at', 'revoked_at']),
+      check('auth_rate_limits','auth_rate_limits_expiry',['expires_at', 'window_started_at']),
+      check('auth_rate_limits','auth_rate_limits_subject_hash_length',['subject_hash']),
+      check('installation_state','installation_state_singleton',['id']),
+      check('installation_state','installation_state_bootstrap_integrity',['bootstrap_consumed_at', 'initial_owner_id']),
+      check('invitations','invitations_binding',['intended_role_id', 'recipient_auth_version', 'issuer_auth_version']),
+      check('invitations','invitations_expiry',['created_at', 'expires_at']),
+      check('invitations','invitations_token_hash_length',['token_hash']),
+      check('invitations','invitations_lifecycle',['created_at', 'expires_at', 'accepted_at', 'revoked_at']),
+      check('mfa_methods','mfa_methods_active_binding',['state', 'enrollment_challenge_id']),
+      check('mfa_methods','mfa_methods_state_integrity',['state', 'confirmed_at', 'enrollment_expires_at']),
+      check('mfa_methods','mfa_methods_seed_not_empty',['seed_ciphertext']),
+      check('mfa_methods','mfa_methods_iv_length',['iv']),
+      check('mfa_methods','mfa_methods_tag_length',['tag']),
+      check('mfa_methods','mfa_methods_timeline',['created_at', 'confirmed_at', 'last_accepted_step', 'enrollment_expires_at', 'state']),
+      check('mfa_recovery_codes','mfa_recovery_codes_code_hash_length',['code_hash']),
+      check('mfa_recovery_codes','mfa_recovery_codes_lifecycle',['created_at', 'used_at', 'revoked_at']),
+      check('password_reset_tokens','password_reset_tokens_expiry',['created_at', 'expires_at']),
+      check('password_reset_tokens','password_reset_tokens_token_hash_length',['token_hash']),
+      check('password_reset_tokens','password_reset_tokens_lifecycle',['created_at', 'expires_at', 'consumed_at', 'revoked_at']),
+      check('security_events','security_events_ip_hash_length',['ip_hash']),
+      check('security_events','security_events_metadata_keys',['metadata_safe_json']),
+      check('sessions','sessions_valid_times',['created_at', 'last_activity_at', 'idle_expires_at', 'absolute_expires_at']),
+      check('sessions','sessions_auth_version_positive',['auth_version']),
+      check('sessions','sessions_token_hash_length',['token_hash']),
+      check('sessions','sessions_ip_hash_length',['ip_hash']),
+      check('sessions','sessions_revocation_integrity',['created_at', 'revoked_at', 'revocation_reason']),
+      check('users','users_auth_version_positive',['auth_version']),
+      check('users','users_email_canonical',['email_normalized']),
+      check('users','users_active_password',['status', 'password_hash']),
+      check('team_administration_guard','team_administration_guard_singleton',['id']),
+    ];
+    expect(expected.map(r=>r.name).sort()).toEqual(cases.map(([name])=>name).sort());
+    expect(await installedChecks(db,foundationTables)).toEqual(sortContracts(expected));
   });
   it.each(['pending_mfa', 'active', 'disabled'] as const)('%s cannot retain a null/empty hash', (status) => isolated(async (transaction) => {
     for (const password of [null, '']) await expect(transaction.updateTable('users').set({ status, password_hash: password }).execute()).rejects.toMatchObject({ code: 'ER_CHECK_CONSTRAINT_VIOLATED' });
@@ -144,9 +182,7 @@ describe('every security foreign key', () => {
     });
   }));
   it('matches all deployed security relationships with RESTRICT for delete AND update', async () => {
-    const rows = await sql<{ name: string; parent: string; child: string; deletion: string; updating: string }>`SELECT CONSTRAINT_NAME AS name, REFERENCED_TABLE_NAME AS parent, TABLE_NAME AS child, DELETE_RULE AS deletion, UPDATE_RULE AS updating FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME NOT LIKE 'brand%' AND TABLE_NAME NOT LIKE 'media%' AND TABLE_NAME NOT LIKE 'ai%' AND TABLE_NAME NOT LIKE 'content%'`.execute(db);
-    expect(rows.rows).toHaveLength(foreignKeys.length);
-    expect(rows.rows.every((row) => row.deletion === 'RESTRICT' && row.updating === 'RESTRICT')).toBe(true);
-    expect(rows.rows.map((row) => row.name).sort()).toEqual(foreignKeys.map(([table, column, parent]) => foreignKeyName(table, column, parent)).sort());
+    const expected=foreignKeys.map(([table,column,parent])=>foreignKey(foreignKeyName(table,column,parent),table,[column],parent,['id']));
+    expect(await installedForeignKeys(db,foundationTables)).toEqual(sortContracts(expected));
   });
 });

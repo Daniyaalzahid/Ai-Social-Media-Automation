@@ -46,12 +46,12 @@ beforeAll(async () => {
 afterAll(async () => { await runtime.close(); await handle.close(); });
 
 describe('real MySQL security foundation', () => {
-  it('creates 44 application tables on real MySQL with enforced checks and explicit InnoDB', async () => {
+  it('creates 49 application tables on real MySQL with enforced checks and explicit InnoDB', async () => {
     const version = await sql<{ version: string }>`SELECT VERSION() AS version`.execute(db);
     expect(version.rows[0]?.version).toMatch(/^8\./);
     const tables = await sql<{ name: string; engine: string; collation: string }>`SELECT TABLE_NAME AS name, ENGINE AS engine, TABLE_COLLATION AS collation FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()`.execute(db);
     const security = tables.rows.filter((row) => !row.name.startsWith('kysely_') && row.name !== 'schema_migration_checksums');
-    expect(security).toHaveLength(44);
+    expect(security).toHaveLength(49);
     expect(security.every((row) => row.engine === 'InnoDB' && row.collation === 'utf8mb4_bin')).toBe(true);
   });
   it('initial Brand Brain claim IDs are valid UUIDs and approved context is readable', async () => {
@@ -63,7 +63,7 @@ describe('real MySQL security foundation', () => {
     await migrateDatabase(db);
     expect(await db.selectFrom('installation_state').selectAll().execute()).toHaveLength(1);
     const ledger = await sql<{ state: string }>`SELECT state FROM schema_migration_checksums`.execute(db);
-    expect(ledger.rows).toHaveLength(10);
+    expect(ledger.rows).toHaveLength(11);
     expect(ledger.rows.every((row) => row.state === 'applied')).toBe(true);
   });
   it('sets the server connection timezone to UTC for SQL defaults', async () => {
@@ -195,6 +195,16 @@ describe('real MySQL security foundation', () => {
     await expect(runtime.db.updateTable('roles').set({ label: 'forbidden' }).execute()).rejects.toMatchObject({ code: 'ER_TABLEACCESS_DENIED_ERROR' });
     await expect(runtime.db.updateTable('permissions').set({ code: 'forbidden' }).execute()).rejects.toMatchObject({ code: 'ER_TABLEACCESS_DENIED_ERROR' });
     await expect(runtime.db.insertInto('role_permissions').values({ role_id: randomUUID(), permission_id: randomUUID() }).execute()).rejects.toMatchObject({ code: 'ER_TABLEACCESS_DENIED_ERROR' });
+  });
+  it('runtime credential grants remain table-scoped without DDL or authorization-history deletion', async () => {
+    const grants=await sql<Record<string,string>>`SHOW GRANTS FOR CURRENT_USER()`.execute(runtime.db);
+    const lines=grants.rows.flatMap(r=>Object.values(r));
+    expect(lines.filter(v=>v.includes('.`social_credentials`')).map(v=>v.split(' TO ')[0])).toEqual([
+      `GRANT SELECT, INSERT, UPDATE, DELETE ON \`${config.database}\`.\`social_credentials\``,
+    ]);
+    await expect(sql`ALTER TABLE social_credentials ADD COLUMN forbidden_runtime int`.execute(runtime.db)).rejects.toMatchObject({code:'ER_TABLEACCESS_DENIED_ERROR'});
+    await expect(runtime.db.deleteFrom('social_authorizations').execute()).rejects.toMatchObject({code:'ER_TABLEACCESS_DENIED_ERROR'});
+    expect(lines.some(v=>/WITH GRANT OPTION|GRANT ALL PRIVILEGES/.test(v))).toBe(false);
   });
   it('rejects a connected database identity mismatch before destructive SQL', async () => {
     const other = new URL(process.env.TEST_DATABASE_MIGRATION_URL!); other.pathname = '/bsa_test_wrong';

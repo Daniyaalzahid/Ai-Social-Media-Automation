@@ -22,6 +22,11 @@ server = binary_root / 'usr/sbin/mysqld'
 client = binary_root / 'usr/bin/mysql'
 configuration = state / 'private.json'
 runtime_grants = {
+    'social_guard': 'SELECT, UPDATE',
+    'social_transactions': 'SELECT, INSERT, UPDATE, DELETE',
+    'social_authorizations': 'SELECT, INSERT, UPDATE',
+    'social_destinations': 'SELECT, INSERT, UPDATE',
+    'social_credentials': 'SELECT, INSERT, UPDATE, DELETE',
     'content_items': 'SELECT, INSERT, UPDATE (revision_sequence)',
     'content_revisions': 'SELECT, INSERT',
     'content_variants': 'SELECT, INSERT',
