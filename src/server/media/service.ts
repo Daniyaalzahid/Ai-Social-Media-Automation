@@ -1,3 +1,4 @@
+import { activePublishHold } from '../publishing/media-hold.ts';
 import { randomUUID,randomBytes,createHash } from 'node:crypto';
 import { sql,type Kysely,type Selectable } from 'kysely';
 import { z } from 'zod';
@@ -35,7 +36,7 @@ export function createMediaService(db:MediaDatabase,storage:MediaStorage){
   if(!parents.includes(row.created_by))throw new MediaError(409,'Media changed.');
   if(context){own(context,row);if(row.created_by!==context.userId)requirePermission(context,'media.manage');if(row.status!=='temporary'&&row.status!=='deletion_pending'&&row.status!=='deleted')throw new MediaError(409,'Only temporary media can be removed.');}
   if(row.status==='deleted')return false;if(row.status==='deletion_pending')return true;
-  const now=await clock(tx);if(!eligible(row)||reason==='expired'&&row.expires_at>now){if(raw)throw new MediaError(409,'This media is protected from removal.');return false;}
+  const now=await clock(tx);if(await activePublishHold(tx,row.id,now)){if(raw)throw new MediaError(409,'This media is protected from removal.');return false;}if(!eligible(row)||reason==='expired'&&row.expires_at>now){if(raw)throw new MediaError(409,'This media is protected from removal.');return false;}
   await tx.updateTable('media_assets').set({status:'deletion_pending',deletion_reason:reason}).where('id','=',id).execute();
   if(row.status==='receiving')await tx.updateTable('media_storage_guard').set({receiving_count:sql`receiving_count-1`}).where('id','=',1).execute();
   await audit(tx,id,'removal_requested',context);return true;
@@ -83,7 +84,7 @@ export function createMediaService(db:MediaDatabase,storage:MediaStorage){
    // an attached asset; unrelated/future attached or retained states stay protected.
    const releases=await db.selectFrom('content_media_protection as p').innerJoin('media_assets as m','m.id','p.media_id').select(['p.media_id','m.created_by']).where('m.status','=','attached').where('p.protected_until','<=',now).where('p.media_id','in',db.selectFrom('content_revision_media').select('media_id')).orderBy('p.protected_until').orderBy('p.media_id').limit(MEDIA_LIMITS.cleanupBatch).execute();
    let releaseFailures=0;
-   for(const release of releases)try{await transaction(async(tx)=>{await tx.selectFrom('users').select('id').where('id','=',release.created_by).forShare().executeTakeFirstOrThrow();await guard(tx);const row=await tx.selectFrom('media_assets').selectAll().where('id','=',release.media_id).forUpdate().executeTakeFirst();const hold=await tx.selectFrom('content_media_protection').select('protected_until').where('media_id','=',release.media_id).forUpdate().executeTakeFirst();if(row?.status==='attached'&&row.created_by===release.created_by&&hold&&hold.protected_until<=await clock(tx)){await tx.updateTable('media_assets').set({status:'temporary',expires_at:now}).where('id','=',row.id).execute();await audit(tx,row.id,'protection_released',null);}});}catch{releaseFailures++;}
+   for(const release of releases)try{await transaction(async(tx)=>{await tx.selectFrom('users').select('id').where('id','=',release.created_by).forShare().executeTakeFirstOrThrow();await guard(tx);const row=await tx.selectFrom('media_assets').selectAll().where('id','=',release.media_id).forUpdate().executeTakeFirst();const hold=await tx.selectFrom('content_media_protection').select('protected_until').where('media_id','=',release.media_id).forUpdate().executeTakeFirst();if(row?.status==='attached'&&row.created_by===release.created_by&&hold&&hold.protected_until<=await clock(tx)&&!await activePublishHold(tx,row.id,await clock(tx))){await tx.updateTable('media_assets').set({status:'temporary',expires_at:now}).where('id','=',row.id).execute();await audit(tx,row.id,'protection_released',null);}});}catch{releaseFailures++;}
 
    for(const status of ['deletion_pending','receiving','temporary'] as const){if(rows.length>=MEDIA_LIMITS.cleanupBatch)break;let query=db.selectFrom('media_assets').select('id').where('status','=',status);if(status!=='deletion_pending')query=query.where('expires_at','<=',now);rows.push(...await query.orderBy('expires_at').orderBy('id').limit(MEDIA_LIMITS.cleanupBatch-rows.length).execute());}
    let deleted=0,failed=releaseFailures;

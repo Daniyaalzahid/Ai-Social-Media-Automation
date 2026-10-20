@@ -46,12 +46,28 @@ beforeAll(async () => {
 afterAll(async () => { await runtime.close(); await handle.close(); });
 
 describe('real MySQL security foundation', () => {
-  it('creates 49 application tables on real MySQL with enforced checks and explicit InnoDB', async () => {
+  it('creates exactly 53 approved application tables on real MySQL with enforced checks and explicit InnoDB', async () => {
     const version = await sql<{ version: string }>`SELECT VERSION() AS version`.execute(db);
     expect(version.rows[0]?.version).toMatch(/^8\./);
     const tables = await sql<{ name: string; engine: string; collation: string }>`SELECT TABLE_NAME AS name, ENGINE AS engine, TABLE_COLLATION AS collation FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()`.execute(db);
-    const security = tables.rows.filter((row) => !row.name.startsWith('kysely_') && row.name !== 'schema_migration_checksums');
-    expect(security).toHaveLength(49);
+    const expectedTables = [
+      'ai_generation_guard', 'ai_generations', 'audit_logs', 'auth_challenges',
+      'auth_rate_limits', 'brand_categories', 'brand_claims', 'brand_contacts',
+      'brand_ctas', 'brand_emoji', 'brand_examples', 'brand_facts',
+      'brand_hashtags', 'brand_language', 'brand_locations', 'brand_platforms',
+      'brand_seasons', 'brand_voice', 'brand_wording', 'brands',
+      'content_decisions', 'content_items', 'content_media_protection', 'content_revision_authors',
+      'content_revision_facts', 'content_revision_media', 'content_revisions', 'content_submissions',
+      'content_variants', 'installation_state', 'invitations', 'media_assets',
+      'media_storage_guard', 'mfa_methods', 'mfa_recovery_codes', 'password_reset_tokens',
+      'permissions', 'publish_assets', 'publish_events', 'publish_operations',
+      'publish_snapshots', 'role_permissions', 'roles', 'security_events',
+      'sessions', 'social_authorizations', 'social_credentials', 'social_destinations',
+      'social_guard', 'social_transactions', 'team_administration_guard', 'user_roles',
+      'users',
+    ].sort();
+    const security = tables.rows.filter((row) => !['kysely_migration', 'kysely_migration_lock', 'schema_migration_checksums'].includes(row.name));
+    expect(security.map((row) => row.name).sort()).toEqual(expectedTables);
     expect(security.every((row) => row.engine === 'InnoDB' && row.collation === 'utf8mb4_bin')).toBe(true);
   });
   it('initial Brand Brain claim IDs are valid UUIDs and approved context is readable', async () => {
@@ -63,7 +79,7 @@ describe('real MySQL security foundation', () => {
     await migrateDatabase(db);
     expect(await db.selectFrom('installation_state').selectAll().execute()).toHaveLength(1);
     const ledger = await sql<{ state: string }>`SELECT state FROM schema_migration_checksums`.execute(db);
-    expect(ledger.rows).toHaveLength(11);
+    expect(ledger.rows).toHaveLength(12);
     expect(ledger.rows.every((row) => row.state === 'applied')).toBe(true);
   });
   it('sets the server connection timezone to UTC for SQL defaults', async () => {

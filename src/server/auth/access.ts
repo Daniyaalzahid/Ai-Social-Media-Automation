@@ -15,8 +15,8 @@ export const ACCESS_FAILURE = Object.freeze({ ok: false as const, state: 'RESTAR
 export const SESSION_LIMIT = Object.freeze({ ok: false as const, state: 'SESSION_LIMIT' as const, message: 'Session limit reached. Sign out of another device before trying again.' });
 export const ACTIONS = ['REPLACE_FACTOR', 'REGENERATE_RECOVERY', 'REVOKE_SESSIONS'] as const;
 export type Action = typeof ACTIONS[number];
-export type RecentAction = Action | `TEAM_${string}:${string}` | `INTEGRATION_${string}:${string}`;
-function validRecentAction(action: string): boolean { return ACTIONS.some((value) => value === action) || /^INTEGRATION_(CONNECT|RECONNECT|SELECT|DISCONNECT):[A-Za-z0-9_-]{43}$/.test(action) || /^TEAM_(INVITE|ROLE|STATUS|SESSIONS|REVOKE_INVITATION):[A-Za-z0-9_-]{43}$/.test(action); }
+export type RecentAction = Action | `PUBLISH_DISPATCH:${string}` | `TEAM_${string}:${string}` | `INTEGRATION_${string}:${string}`;
+function validRecentAction(action: string): boolean { return ACTIONS.some((value) => value === action) || /^PUBLISH_DISPATCH:[A-Za-z0-9_-]{43}$/.test(action) || /^INTEGRATION_(CONNECT|RECONNECT|SELECT|DISCONNECT):[A-Za-z0-9_-]{43}$/.test(action) || /^TEAM_(INVITE|ROLE|STATUS|SESSIONS|REVOKE_INVITATION):[A-Za-z0-9_-]{43}$/.test(action); }
 export function tokenHash(token: SensitiveValue): Buffer {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token.reveal())) throw new SecurityOperationError();
   return createHash('sha256').update(token.reveal()).digest();

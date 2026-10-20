@@ -42,5 +42,9 @@
   {
     "name": "0010_social_connections.sql",
     "sha256": "b846788569ed44c9d8d4e84654fd2d3b9cbacbbf84fb51924a5302470b2b2cce"
+  },
+  {
+    "name": "0011_publishing_foundation.sql",
+    "sha256": "4006daef63e05448446446bc5eb91ec83ccb5ad1aaa91754219b3bf344783652"
   }
 ]

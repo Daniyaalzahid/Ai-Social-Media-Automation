@@ -1,3 +1,5 @@
+import type { PublishingSchema } from '../publishing/schema';
+export { PUBLISH_DROP_ORDER } from '../publishing/schema';
 import type { SocialSchema as importSocialSchema } from '../social/schema.ts';
 export { SOCIAL_DROP_ORDER } from '../social/schema.ts';
 import type { ColumnType } from 'kysely';
@@ -185,7 +187,7 @@ export const AI_DROP_ORDER = ['ai_generations','ai_generation_guard'] as const;
 export interface AiGenerationsTable {
  id:string;created_by:string;request_id:string;input_digest:Buffer;brand_id:string;brand_revision:number;provider:string;model:string;prompt_version:string;platforms_json:ColumnType<unknown,string,string>;provenance_json:ColumnType<unknown,string,string>;language:'ENGLISH'|'URDU'|'ROMAN_URDU'|'MIXED';status:'IN_PROGRESS'|'COMPLETED'|'FAILED'|'REJECTED';failure:import('../../features/ai/model').AiFailure|null;output_json:ColumnType<unknown,string|null,string|null>;usage_json:ColumnType<unknown,string|null,string|null>;created_at:DateValue;lease_expires_at:DateValue;completed_at:DateValue|null;
 }
-export interface DatabaseSchema extends BrandTables, importSocialSchema {
+export interface DatabaseSchema extends BrandTables, importSocialSchema, PublishingSchema {
  content_items:{id:string;created_by:string;assigned_to:string;revision_sequence:number;created_at:DateValue};
  content_revisions:{id:string;post_id:string;sequence:number;created_by:string;request_id:string;request_digest:Buffer;title:string;language:'ENGLISH'|'URDU'|'ROMAN_URDU'|'MIXED';source:'MANUAL'|'HUMAN_EDITED'|'AI_GENERATED'|'AI_EDITED';generation_id:string|null;generation_provider:string|null;generation_model:string|null;generation_brand_revision:number|null;brand_revision:number;validated:number;created_at:DateValue};
  content_variants:{revision_id:string;platform:'FACEBOOK'|'INSTAGRAM'|'TIKTOK'|'YOUTUBE'|'LINKEDIN';content_json:ColumnType<unknown,string,string>};

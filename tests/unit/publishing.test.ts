@@ -1,0 +1,16 @@
+import { describe,it,expect } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { canonical,publishHash,publishAction,requireTransition } from '../../src/server/publishing/policy';
+import { normalizedResult,productionPublishingProviders } from '../../src/server/publishing/provider';
+import { createPublishingService } from '../../src/server/publishing/service';
+import { PERMISSION_CODES,ROLE_PERMISSIONS } from '../../src/server/db/catalog';
+import { FakePublishingProvider } from '../helpers/publishing-fixtures';
+import { createDatabase } from '../../src/server/db/connection';
+import { PUBLISH_STATES } from '../../src/features/publishing/model';
+it('reuses the existing explicit Owner/Admin permission without grant implication',()=>{expect(PERMISSION_CODES).toHaveLength(32);for(const[role,grants]of Object.entries(ROLE_PERMISSIONS))expect(grants.includes('content.publish')).toBe(['OWNER','MARKETING_ADMIN'].includes(role));});
+it('canonical serialization preserves exact multilingual code points and distinct hashtag fields',()=>{const copy={caption:'اردو\u200d متن\n\nExact copy',hashtags:['#اردو','#Offer']};expect(JSON.parse(canonical(copy))).toEqual(copy);expect(publishHash(copy)).toEqual(publishHash({hashtags:copy.hashtags,caption:copy.caption}));expect(publishHash(copy)).not.toEqual(publishHash({...copy,caption:copy.caption+' '}));expect(publishHash(copy)).not.toEqual(publishHash({...copy,hashtags:[...copy.hashtags].reverse()}));});
+it('purpose commitment binds exact revision, destination, approval and hash',()=>{const c={requestId:randomUUID(),postId:randomUUID(),revisionId:randomUUID(),approvalDecisionId:randomUUID(),destinationId:randomUUID(),platform:'FACEBOOK',authorizationVersion:1,createdAt:new Date().toISOString(),intentHash:'a'.repeat(64)};expect(publishAction(c)).toMatch(/^PUBLISH_DISPATCH:[A-Za-z0-9_-]{43}$/);for(const k of ['revisionId','approvalDecisionId','destinationId','requestId'])expect(publishAction({...c,[k]:randomUUID()})).not.toBe(publishAction(c));});
+it('production capabilities are empty and cannot register the test fake',()=>{expect(productionPublishingProviders().size).toBe(0);expect(()=>createPublishingService({} as ReturnType<typeof createDatabase>['db'],{environment:'production',providers:new Map([['FACEBOOK',new FakePublishingProvider()]])})).toThrow();});
+it.each(['UNKNOWN','PUBLISHED','FAILED'] as const)('%s can never redispatch',from=>{expect(()=>requireTransition(from,'DISPATCHING')).toThrow();});
+it('all defined states are explicit and publication requires mapped definitive evidence',()=>{expect(PUBLISH_STATES).toEqual(['CREATED','DISPATCHING','ACCEPTED','PROCESSING','PUBLISHED','FAILED','UNKNOWN']);for(const result of [{status:'PUBLISHED'},{status:'ACCEPTED',publicationId:null,processingId:null},{status:'PUBLISHED',publicationId:'synthetic',processingId:null,publishedAt:new Date(Date.now()+60000).toISOString()},{status:'UNKNOWN',body:'synthetic sensitive body'}])expect(()=>normalizedResult(result,new Date())).toThrow();});
+describe('closed normalized results',()=>{it.each(['Authorization','cookie','password','access_token','refresh_token','pkce','state','rawBody','url'])('rejects extra credential/raw field %s',name=>{expect(()=>normalizedResult({status:'UNKNOWN',[name]:'PUBLIC_SYNTHETIC_SENTINEL'},new Date())).toThrow();});});
