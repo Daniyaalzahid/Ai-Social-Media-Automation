@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { PHASE_PRODUCTION_BUILD } from 'next/constants';
 
 const config: NextConfig = {
   poweredByHeader: false,
@@ -20,4 +21,8 @@ const config: NextConfig = {
     ] }, { source: '/api/oauth/:provider/callback', headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }] }];
   },
 };
-export default config;
+export default function nextConfig(phase: string): NextConfig {
+  return phase === PHASE_PRODUCTION_BUILD
+    ? { ...config, typescript: { tsconfigPath: './tsconfig.typecheck.json' } }
+    : config;
+}
