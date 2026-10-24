@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Kysely } from 'kysely';
+import { SecurityOperationError } from '../security/sensitive.ts';
 import { PERMISSION_CODES, ROLE_CODES, ROLE_PERMISSIONS } from './catalog.ts';
 import type { DatabaseSchema } from './schema.ts';
 
@@ -30,4 +31,19 @@ export async function seedCatalog(db: Kysely<DatabaseSchema>): Promise<void> {
       await transaction.insertInto('role_permissions').values(ROLE_PERMISSIONS[code].map((permission) => ({ role_id: roleId, permission_id: canonicalCatalogId('permission', permission) }))).execute();
     }
   });
+}
+
+/** Lock and verify the whole authorization catalog; never repair corrupt seeds here. */
+export async function assertCanonicalAuthorization(db: Kysely<DatabaseSchema>): Promise<void> {
+  const roles = await db.selectFrom('roles').select(['id', 'code']).orderBy('id').forUpdate().execute();
+  const permissions = await db.selectFrom('permissions').select(['id', 'code']).orderBy('id').forUpdate().execute();
+  const assignments = await db.selectFrom('role_permissions').selectAll().orderBy('role_id').orderBy('permission_id').forUpdate().execute();
+  const actualRoles = roles.map((row) => `${row.id}:${row.code}`).sort();
+  const expectedRoles = ROLE_CODES.map((code) => `${canonicalCatalogId('role', code)}:${code}`).sort();
+  const actualPermissions = permissions.map((row) => `${row.id}:${row.code}`).sort();
+  const expectedPermissions = PERMISSION_CODES.map((code) => `${canonicalCatalogId('permission', code)}:${code}`).sort();
+  const actualAssignments = assignments.map((row) => `${row.role_id}:${row.permission_id}`).sort();
+  const expectedAssignments = ROLE_CODES.flatMap((role) => ROLE_PERMISSIONS[role].map((permission) => `${canonicalCatalogId('role', role)}:${canonicalCatalogId('permission', permission)}`)).sort();
+  if (JSON.stringify(actualRoles) !== JSON.stringify(expectedRoles) || JSON.stringify(actualPermissions) !== JSON.stringify(expectedPermissions)
+    || JSON.stringify(actualAssignments) !== JSON.stringify(expectedAssignments)) throw new SecurityOperationError();
 }

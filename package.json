@@ -22,6 +22,7 @@
     "check": "npm run lint && npm run typecheck && npm test && npm run secret-scan && npm run audit",
     "db:migrate": "node scripts/database.mjs migrate",
     "db:seed": "node scripts/database.mjs seed",
+    "db:provision:production": "node scripts/provision-production.mjs",
     "test:db": "node scripts/database.mjs test",
     "owner:bootstrap": "node scripts/owner-bootstrap.mjs",
     "media:cleanup": "node --experimental-transform-types scripts/media-cleanup.mjs"

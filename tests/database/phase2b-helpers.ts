@@ -13,14 +13,17 @@ export function scratchDatabase(name: 'bsa_test_clean' | 'bsa_test_recovery') {
   const source = { ...process.env, TEST_DATABASE_MIGRATION_URL: url.href };
   return { source, handle: createDatabase(resolveDatabaseConfiguration(source, 'destructive-test')) };
 }
-export async function resetScratch(target: ReturnType<typeof scratchDatabase>) {
+export async function emptyScratch(target: ReturnType<typeof scratchDatabase>) {
   const db = target.handle.db;
   await assertDestructiveTestDatabase(db, target.source);
   for (const table of [...PUBLISH_DROP_ORDER,...SOCIAL_DROP_ORDER,...CONTENT_DROP_ORDER,...AI_DROP_ORDER,...MEDIA_DROP_ORDER,...BRAND_DROP_ORDER, 'audit_logs', 'security_events', 'mfa_recovery_codes', 'mfa_methods', 'auth_challenges', 'sessions', 'password_reset_tokens', 'invitations',
     'team_administration_guard', 'installation_state', 'user_roles', 'role_permissions', 'permissions', 'roles', 'users', 'auth_rate_limits', 'kysely_migration', 'kysely_migration_lock', 'schema_migration_checksums']) {
     await sql`DROP TABLE IF EXISTS ${sql.id(table)}`.execute(db);
   }
-  await migrateDatabase(db); await seedCatalog(db);
+}
+export async function resetScratch(target: ReturnType<typeof scratchDatabase>) {
+  await emptyScratch(target);
+  await migrateDatabase(target.handle.db); await seedCatalog(target.handle.db);
 }
 export async function makeUser(db: ReturnType<typeof scratchDatabase>['handle']['db'], password: string, status: 'active' | 'pending_mfa' | 'disabled' | 'invited' = 'active', role = 'VIEWER') {
   const id = randomUUID(), email = `${id}@example.test`;

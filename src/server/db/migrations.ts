@@ -49,3 +49,13 @@ export async function migrateDatabase(db: Kysely<DatabaseSchema>): Promise<void>
   const result = await migrator.migrateToLatest();
   if (result.error) throw new Error('Database migration failed; inspect schema and restore isolated backup before retrying');
 }
+
+/** Read-only readiness check, including the full journal, before production bootstrap. */
+export async function assertMigrationsComplete(db: Kysely<DatabaseSchema>): Promise<void> {
+  const entries = await readMigrations();
+  const applied = await sql<{name:string;sha256:string;state:string}>`SELECT name, sha256, state FROM schema_migration_checksums ORDER BY name`.execute(db);
+  const journal = await sql<{name:string}>`SELECT name FROM kysely_migration ORDER BY name`.execute(db);
+  if (applied.rows.length !== entries.length || journal.rows.length !== entries.length || entries.some((entry, i) => applied.rows[i]?.name !== entry.name || applied.rows[i]?.sha256 !== entry.sha256 || applied.rows[i]?.state !== 'applied' || journal.rows[i]?.name !== entry.name)) {
+    throw new Error('Complete verified migration journal required');
+  }
+}

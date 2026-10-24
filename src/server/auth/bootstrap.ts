@@ -3,8 +3,8 @@ import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
 import type { DatabaseSchema } from '../db/schema.ts';
 import type { DatabaseConfiguration } from '../db/config.ts';
-import { canonicalCatalogId } from '../db/seeds.ts';
-import { ROLE_CODES, PERMISSION_CODES, ROLE_PERMISSIONS } from '../db/catalog.ts';
+import { canonicalCatalogId, assertCanonicalAuthorization } from '../db/seeds.ts';
+import { assertMigrationsComplete } from '../db/migrations.ts';
 import { normalizeEmail } from '../security/identity.ts';
 import { appendAudit, appendSecurityEvent, type SecurityEventInput } from '../security/events.ts';
 import { SecurityOperationError } from '../security/sensitive.ts';
@@ -16,23 +16,10 @@ export async function verifyBootstrapDatabase(db: Kysely<DatabaseSchema>, config
   if ((configuration.mode !== 'production' && !configuration.user.endsWith('_migration')) || (configuration.mode === 'production' && !configuration.tls)) throw new SecurityOperationError();
   const identity = (await sql<{ database_name: string; account_name: string }>`SELECT DATABASE() AS database_name, CURRENT_USER() AS account_name`.execute(db)).rows[0];
   if (!identity || identity.database_name !== configuration.database || identity.account_name.split('@')[0] !== configuration.user) throw new SecurityOperationError();
+  if (configuration.mode === 'production') await assertMigrationsComplete(db);
   } catch { throw new SecurityOperationError(); }
 }
 
-/** Lock and verify the whole authorization catalog; never repair corrupt seeds here. */
-async function assertCanonicalAuthorization(db: Kysely<DatabaseSchema>): Promise<void> {
-  const roles = await db.selectFrom('roles').select(['id', 'code']).orderBy('id').forUpdate().execute();
-  const permissions = await db.selectFrom('permissions').select(['id', 'code']).orderBy('id').forUpdate().execute();
-  const assignments = await db.selectFrom('role_permissions').selectAll().orderBy('role_id').orderBy('permission_id').forUpdate().execute();
-  const actualRoles = roles.map((row) => `${row.id}:${row.code}`).sort();
-  const expectedRoles = ROLE_CODES.map((code) => `${canonicalCatalogId('role', code)}:${code}`).sort();
-  const actualPermissions = permissions.map((row) => `${row.id}:${row.code}`).sort();
-  const expectedPermissions = PERMISSION_CODES.map((code) => `${canonicalCatalogId('permission', code)}:${code}`).sort();
-  const actualAssignments = assignments.map((row) => `${row.role_id}:${row.permission_id}`).sort();
-  const expectedAssignments = ROLE_CODES.flatMap((role) => ROLE_PERMISSIONS[role].map((permission) => `${canonicalCatalogId('role', role)}:${canonicalCatalogId('permission', permission)}`)).sort();
-  if (JSON.stringify(actualRoles) !== JSON.stringify(expectedRoles) || JSON.stringify(actualPermissions) !== JSON.stringify(expectedPermissions)
-    || JSON.stringify(actualAssignments) !== JSON.stringify(expectedAssignments)) throw new SecurityOperationError();
-}
 const ownerInput = z.object({ email: z.string().max(320), displayName: z.string().min(1).max(120).refine((value) => value.trim().length > 0 && [...value].every((character) => character.codePointAt(0)! >= 32 && character.codePointAt(0) !== 127)), password: z.unknown() }).strict();
 
 /** Administrative tooling only. Never accepts an HTTP request or creates a session/factor. */
