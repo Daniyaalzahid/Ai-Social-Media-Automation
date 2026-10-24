@@ -11,6 +11,7 @@ import { encryptToken,decryptToken,type TokenKey } from './crypto.ts';
 import { validateGrant,providerDeadline,type SocialProvider,type Grant } from './provider.ts';
 import { integrationEvent } from './events.ts';
 export class IntegrationError extends Error{constructor(readonly reason:'SETUP_REQUIRED'|'CONFLICT'|'INVALID_FLOW'|'RATE_LIMITED'|'UNAVAILABLE'){super('Unable to complete this connection request.');this.name='IntegrationError';}}
+function sameScopes(value:unknown,expected:readonly string[]){try{const scopes=typeof value==='string'?JSON.parse(value):value;return Array.isArray(scopes)&&scopes.length===expected.length&&scopes.every((s,i)=>s===expected[i]);}catch{return false;}}
 const clock=async(db:Kysely<DatabaseSchema>)=>(await sql<{now:Date}>`SELECT CURRENT_TIMESTAMP(3) AS now`.execute(db)).rows[0]!.now;
 async function guard(db:Kysely<DatabaseSchema>){if(!await db.selectFrom('social_guard').select('id').where('id','=',1).forUpdate().executeTakeFirst())throw new SecurityOperationError();}
 export function createConnectionsService(db:Kysely<DatabaseSchema>,options:{origin:string;key:()=>TokenKey;providers:ReadonlyMap<SocialProviderId,SocialProvider>;environment:'production'|'development'|'test'}){
@@ -103,12 +104,18 @@ export function createConnectionsService(db:Kysely<DatabaseSchema>,options:{orig
     if(!t||t.status!=='PENDING'||t.expires_at<=state.now||t.actor_id!==context.userId||t.session_id!==state.row.id||t.auth_version!==state.identity.user.auth_version||t.redirect_uri!==callbackURI(options.origin,id))throw new IntegrationError('INVALID_FLOW');
     if(query.denied){await tx.updateTable('social_transactions').set({status:'FAILED',finished_at:state.now,pkce_ciphertext:null,pkce_iv:null,pkce_tag:null,key_id:null}).where('id','=',t.id).execute();await integrationEvent(tx,context.userId,'failed');return null;}
     const verifier=t.pkce_ciphertext&&t.pkce_iv&&t.pkce_tag&&t.key_id?decryptToken({ciphertext:t.pkce_ciphertext,iv:t.pkce_iv,tag:t.pkce_tag,key_id:t.key_id},options.key(),{id:t.id,provider:id,purpose:'pkce',version:1}):null;
-    if(p.pkce!==!!verifier)throw new SecurityOperationError();
+    if(p.pkce!==!!verifier||!sameScopes(t.requested_json,p.requestedScopes))throw new SecurityOperationError();
     await tx.updateTable('social_transactions').set({status:'EXCHANGING',pkce_ciphertext:null,pkce_iv:null,pkce_tag:null,key_id:null}).where('id','=',t.id).execute();return{t,verifier};
    });
    if(!claimed)return false;
    try{
-    const grant=await providerDeadline(signal=>p.exchange({code:query.code!,verifier:claimed.verifier,redirectURI:claimed.t.redirect_uri,signal})),data=validateGrant(p,grant);
+    const attempt=Object.freeze({id:claimed.t.id,authorizationId:claimed.t.target_id,provider:id,stateHash:oauthHash(query.state).toString('hex'),expiresAt:+claimed.t.expires_at,check:async()=>transaction(async tx=>{
+     const{context,state}=await authority(tx,raw);await guard(tx);
+     const t=await tx.selectFrom('social_transactions').selectAll().where('id','=',claimed.t.id).forUpdate().executeTakeFirst();
+     if(!t||t.status!=='EXCHANGING'||t.provider!==id||!t.state_hash.equals(oauthHash(query.state))||t.expires_at<=state.now||t.actor_id!==context.userId||t.session_id!==state.row.id||t.auth_version!==state.identity.user.auth_version||t.redirect_uri!==callbackURI(options.origin,id)||!sameScopes(t.requested_json,p.requestedScopes)||t.target_id!==claimed.t.target_id||t.target_version!==claimed.t.target_version)throw new IntegrationError('INVALID_FLOW');
+     if(t.target_version!==null)await authRow(tx,t.target_id,id,t.target_version);
+    })});
+    const grant=await providerDeadline(signal=>p.exchange({code:query.code!,verifier:claimed.verifier,redirectURI:claimed.t.redirect_uri,signal,attempt})),data=validateGrant(p,grant);
     await transaction(async tx=>{
      const{context,state}=await authority(tx,raw);await guard(tx);
      const t=await tx.selectFrom('social_transactions').selectAll().where('id','=',claimed.t.id).forUpdate().executeTakeFirst();

@@ -1,3 +1,4 @@
+import { reviewedLinkedInProfile,type LinkedInProfile } from './linkedin-profile';
 import { LINKEDIN_AUTH_PATH,LINKEDIN_POST_PATH,linkedinPostId,linkedinVersion,type LinkedInOperation } from './linkedin';
 import { request } from 'node:https';
 import { inspect } from 'node:util';
@@ -15,7 +16,7 @@ export type ReviewedProfile={
  audience:string|null;requiredScopes:readonly string[];requestClass:'STRUCTURED'|'EMPTY'|'MEDIA';
  responseClass:ResponseClass;requestSchema:z.ZodType;responseSchema:z.ZodType;
  contentType:'application/json'|'application/octet-stream';version:Readonly<{kind:'PINNED';value:string}|{kind:'UNVERSIONED_VERIFIED'}>;
- /** Closed test-only LinkedIn protocol; never a caller header map. */
+ /** Closed LinkedIn protocol; never a caller header map. */
  linkedin?:LinkedInOperation;
  issue?:Readonly<{field:string;targetKey:string;expiresAtField?:string}>;
 };
@@ -28,7 +29,7 @@ export class ProviderCapability {
 }
 export type SafeTransportResult={status:number;data:unknown;capability:ProviderCapability|null;linkedin?:Readonly<{kind:'POST_CREATED';postId:string}>};
 /** Server-owned factory: no production profiles are registered anywhere in this phase. */
-export function createReviewedOperationTransport(options:{binding:Binding;budget:Budget;authority:()=>Promise<Authority>;profiles:readonly ReviewedProfile[];credentials?:()=>Promise<CredentialGrant>;testNetwork?:NetworkTestHooks}){
+export function createReviewedOperationTransport(options:{binding:Binding;budget:Budget;authority:()=>Promise<Authority>;profiles:readonly ReviewedProfile[];credentials?:()=>Promise<CredentialGrant>;testNetwork?:NetworkTestHooks|undefined;linkedinProfile?:LinkedInProfile|undefined}){
  const b=binding(options.binding),owner=Object.freeze({});const profiles=new Map<string,Readonly<ReviewedProfile>>();const owned=new Set<ProviderCapability>();let disposed=false,operationPossible=false;
  assertTestHooks(options.testNetwork);
  for(const input of options.profiles){
@@ -37,7 +38,8 @@ export function createReviewedOperationTransport(options:{binding:Binding;budget
   if(input.version.kind==='PINNED'&&(!/^[A-Za-z0-9._-]{1,64}$/.test(input.version.value)||input.version.value.toLowerCase()==='latest'))fault('INVALID');
   for(const host of input.authorities)checkedURL('https://'+host+input.path,[host]);
   if(input.linkedin!==undefined){
-   if(process.env.NODE_ENV!=='test'||process.env.APP_ENV!=='test'||options.testNetwork?.dialAddress!=='127.0.0.1')fault('UNCONFIGURED');
+   if(options.linkedinProfile){const admitted=reviewedLinkedInProfile(options.linkedinProfile);if(input.version.kind!=='PINNED'||input.version.value!==admitted.version)fault('UNCONFIGURED');}
+   else if(process.env.NODE_ENV!=='test'||process.env.APP_ENV!=='test'||options.testNetwork?.dialAddress!=='127.0.0.1')fault('UNCONFIGURED');
    if(input.provider!=='LINKEDIN'||b.media||input.endpointClass!=='STATIC_PROVIDER_API_ENDPOINT'||input.authorities.length!==1||input.authorities[0]!=='api.linkedin.com'||input.audience!=='api.linkedin.com'||input.version.kind!=='PINNED'||input.issue)fault('INVALID');
    linkedinVersion(input.version.value);
    if(input.linkedin==='AUTHORIZATION'){if(input.method!=='GET'||input.path!==LINKEDIN_AUTH_PATH||input.requestClass!=='EMPTY'||input.responseClass!=='STATUS_RESPONSE')fault('INVALID');}
@@ -48,7 +50,7 @@ export function createReviewedOperationTransport(options:{binding:Binding;budget
   if(input.issue&&(!/^[a-zA-Z0-9_]{1,128}$/.test(input.issue.field)||! /^[A-Za-z0-9_-]{1,64}$/.test(input.issue.targetKey)))fault('INVALID');
   profiles.set(input.key,Object.freeze({...input,authorities:Object.freeze([...input.authorities]),requiredScopes:Object.freeze([...input.requiredScopes]),version:Object.freeze({...input.version}),...(input.issue?{issue:Object.freeze({...input.issue})}:{})}));
  }
- async function current(profile:Readonly<ReviewedProfile>){authority(b,await options.budget.phase(LIMITS.smallMs,()=>options.authority()),profile.requiredScopes);options.budget.check();if(disposed)fault('EXPIRED');}
+ async function current(profile:Readonly<ReviewedProfile>){if(options.linkedinProfile)reviewedLinkedInProfile(options.linkedinProfile);authority(b,await options.budget.phase(LIMITS.smallMs,()=>options.authority()),profile.requiredScopes);options.budget.check();if(disposed)fault('EXPIRED');}
  return Object.freeze({
   async request(key:string,input:{body?:unknown;capture?:ApprovedCapture;media?:MediaRequest;capability?:ProviderCapability}={}):Promise<SafeTransportResult>{
    let sent=operationPossible;let cap:ProviderCapability|undefined;let requestBudget:Budget|undefined;
@@ -84,37 +86,7 @@ export function createReviewedOperationTransport(options:{binding:Binding;budget
     if(Object.keys(headers).length>LIMITS.requestHeaderCount||headerBytes>LIMITS.requestHeaders)fault('BODY_LIMIT');
     await current(profile);requestBudget=new Budget(profile.requestClass==='MEDIA'?LIMITS.mediaMs:profile.responseClass==='STATUS_RESPONSE'?LIMITS.statusMs:LIMITS.smallMs,leaseEnd,options.budget.signal);
     const budget=requestBudget;
-    const result=await new Promise<{status:number;bytes:Buffer;postId?:string}>((yes,no)=>{
-     let done=false,responseStarted=false;let headerTimer:ReturnType<typeof setTimeout>|undefined;let idle:ReturnType<typeof setTimeout>|undefined;
-     let readyResolve:()=>void=()=>undefined,readyReject:(e:unknown)=>void=()=>undefined;
-     const ready=new Promise<void>((resolve,reject)=>{readyResolve=resolve;readyReject=reject;});
-     const agent=secureAgent(url.hostname,budget,()=>{sent=true;operationPossible=true;readyResolve();},options.testNetwork);
-     const req=request({protocol:'https:',hostname:url.hostname,port:443,path:url.pathname+url.search,method:profile.method,headers,agent,maxHeaderSize:LIMITS.responseHeaders,insecureHTTPParser:false},res=>{
-      responseStarted=true;clearTimeout(headerTimer);req.maxHeadersCount=0;
-      const status=res.statusCode??0;const maximum=responseMaximum(status>=400?'PROVIDER_ERROR_RESPONSE':profile.responseClass);
-      if(status<200||status>=300&&status<400){finish(new TransportFault(status>=300&&status<400?'REDIRECT_DENIED':'NETWORK_AMBIGUOUS'));res.destroy();return;}
-      if(res.rawHeaders.length/2>LIMITS.responseHeaderCount){finish(new TransportFault('BODY_LIMIT'));res.destroy();return;}
-      const encoding=res.headers['content-encoding'];if(encoding!==undefined&&encoding!=='identity'){finish(new TransportFault('ENCODING_DENIED'));res.destroy();return;}
-      let postId:string|undefined;
-      if(profile.linkedin==='CREATE'){
-       if(status!==201){finish(new TransportFault('NETWORK_AMBIGUOUS'));res.destroy();return;}
-       const ids:string[]=[];for(let i=0;i<res.rawHeaders.length;i+=2)if(res.rawHeaders[i]!.toLowerCase()==='x-restli-id')ids.push(res.rawHeaders[i+1]!);
-       try{if(ids.length!==1)fault('BODY_INVALID');postId=linkedinPostId(ids[0]);}catch{finish(new TransportFault('BODY_INVALID'));res.destroy();return;}
-      }
-      if(profile.linkedin!=='CREATE'&&res.headers['content-type']!=='application/json'&&res.headers['content-type']!=='application/json; charset=utf-8'){finish(new TransportFault('BODY_INVALID'));res.destroy();return;}
-      const declared=res.headers['content-length'];if(declared!==undefined&&(!/^\d+$/.test(declared)||Number(declared)>maximum)){finish(new TransportFault('BODY_LIMIT'));res.destroy();return;}
-      let count=0;const chunks:Buffer[]=[];
-      const arm=()=>{clearTimeout(idle);idle=setTimeout(()=>finish(new TransportFault('TIMEOUT')),LIMITS.responseIdleMs);};arm();options.testNetwork?.stage?.('BODY');
-      res.on('data',(chunk:Buffer)=>{arm();count+=chunk.length;if(count>maximum){finish(new TransportFault('BODY_LIMIT'));res.destroy();return;}if(profile.linkedin!=='CREATE')chunks.push(Buffer.from(chunk));});
-      res.once('error',()=>finish(new TransportFault('BODY_INVALID')));res.once('aborted',()=>finish(new TransportFault('BODY_INVALID')));
-      res.once('end',()=>{if(!res.complete||declared!==undefined&&Number(declared)!==count)return finish(new TransportFault('BODY_INVALID'));if(status>=400)return finish(new TransportFault('NETWORK_AMBIGUOUS'));finish(undefined,{status,bytes:Buffer.concat(chunks),...(postId?{postId}:{})});});
-     });req.maxHeadersCount=0;
-     const abort=()=>finish(new TransportFault('TIMEOUT'));budget.signal.addEventListener('abort',abort,{once:true});
-     function finish(error?:unknown,value?:{status:number;bytes:Buffer;postId?:string}){if(done)return;done=true;clearTimeout(idle);clearTimeout(headerTimer);budget.signal.removeEventListener('abort',abort);if(error){readyReject(error);no(safeFault(error,sent));}else if(value)yes(value);req.destroy();agent.destroy();}
-     req.once('error',error=>finish(error));
-     void(async()=>{try{await ready;budget.check();await current(profile);if(length){if(profile.requestClass==='MEDIA')await sendApprovedMedia(media!,b,budget,write);else await write(body!);}req.end(()=>{if(!responseStarted)headerTimer=setTimeout(()=>finish(new TransportFault('TIMEOUT')),LIMITS.headerMs);});}catch(e){finish(e);}})();
-     async function write(bytes:Uint8Array){await current(profile!);budget.check();if(!bytes.byteLength)return;await budget.phase(LIMITS.uploadIdleMs,signal=>new Promise<void>((resolve,reject)=>{const aborted=()=>{req.destroy();reject(new TransportFault('TIMEOUT'));};signal.addEventListener('abort',aborted,{once:true});req.write(bytes,e=>{signal.removeEventListener('abort',aborted);if(e)reject(new TransportFault('NETWORK_AMBIGUOUS'));else resolve();});}));}
-    });
+    const result=await secureRequest({url,method:profile.method,headers,budget,responseClass:profile.responseClass,create:profile.linkedin==='CREATE',testNetwork:options.testNetwork,check:()=>current(profile),onReady:()=>{sent=true;operationPossible=true;},send:async write=>{if(length){if(profile.requestClass==='MEDIA')await sendApprovedMedia(media!,b,budget,write);else await write(body!);}}});
     await current(profile);
     if(profile.linkedin==='CREATE'){if(!result.postId)fault('BODY_INVALID');return{status:result.status,data:null,capability:null,linkedin:Object.freeze({kind:'POST_CREATED',postId:result.postId})};}
     const data=ingestJson(result.bytes,profile.responseSchema,profile.responseClass);
@@ -134,3 +106,65 @@ export function createReviewedOperationTransport(options:{binding:Binding;budget
  });
 }
 export function productionProviderTransport(input:{binding:Binding;budget:Budget;authority:()=>Promise<Authority>}){return createReviewedOperationTransport({...input,profiles:[]});}
+
+/** One wire path for publishing and connection operations; no caller-controlled endpoint API. */
+async function secureRequest({url,method,headers,budget,responseClass,create,testNetwork,check,onReady,send}:{url:URL;method:string;headers:Record<string,string>;budget:Budget;responseClass:ResponseClass;create:boolean;testNetwork?:NetworkTestHooks|undefined;check:()=>Promise<void>;onReady:()=>void;send:(write:(bytes:Uint8Array)=>Promise<void>)=>Promise<void>}){
+ let sent=false;
+ return new Promise<{status:number;bytes:Buffer;postId?:string}>((yes,no)=>{
+     let done=false,responseStarted=false;let headerTimer:ReturnType<typeof setTimeout>|undefined;let idle:ReturnType<typeof setTimeout>|undefined;
+     let readyResolve:()=>void=()=>undefined,readyReject:(e:unknown)=>void=()=>undefined;
+     const ready=new Promise<void>((resolve,reject)=>{readyResolve=resolve;readyReject=reject;});
+     const agent=secureAgent(url.hostname,budget,()=>{sent=true;onReady();readyResolve();},testNetwork);
+     const req=request({protocol:'https:',hostname:url.hostname,port:443,path:url.pathname+url.search,method,headers,agent,maxHeaderSize:LIMITS.responseHeaders,insecureHTTPParser:false},res=>{
+      responseStarted=true;clearTimeout(headerTimer);req.maxHeadersCount=0;
+      const status=res.statusCode??0;const maximum=responseMaximum(status>=400?'PROVIDER_ERROR_RESPONSE':responseClass);
+      if(status<200||status>=300&&status<400){finish(new TransportFault(status>=300&&status<400?'REDIRECT_DENIED':'NETWORK_AMBIGUOUS'));res.destroy();return;}
+      if(res.rawHeaders.length/2>LIMITS.responseHeaderCount){finish(new TransportFault('BODY_LIMIT'));res.destroy();return;}
+      const encoding=res.headers['content-encoding'];if(encoding!==undefined&&encoding!=='identity'){finish(new TransportFault('ENCODING_DENIED'));res.destroy();return;}
+      let postId:string|undefined;
+      if(create){
+       if(status!==201){finish(new TransportFault('NETWORK_AMBIGUOUS'));res.destroy();return;}
+       const ids:string[]=[];for(let i=0;i<res.rawHeaders.length;i+=2)if(res.rawHeaders[i]!.toLowerCase()==='x-restli-id')ids.push(res.rawHeaders[i+1]!);
+       try{if(ids.length!==1)fault('BODY_INVALID');postId=linkedinPostId(ids[0]);}catch{finish(new TransportFault('BODY_INVALID'));res.destroy();return;}
+      }
+      if(!create&&res.headers['content-type']!=='application/json'&&res.headers['content-type']!=='application/json; charset=utf-8'){finish(new TransportFault('BODY_INVALID'));res.destroy();return;}
+      const declared=res.headers['content-length'];if(declared!==undefined&&(!/^\d+$/.test(declared)||Number(declared)>maximum)){finish(new TransportFault('BODY_LIMIT'));res.destroy();return;}
+      let count=0;const chunks:Buffer[]=[];
+      const arm=()=>{clearTimeout(idle);idle=setTimeout(()=>finish(new TransportFault('TIMEOUT')),LIMITS.responseIdleMs);};arm();testNetwork?.stage?.('BODY');
+      res.on('data',(chunk:Buffer)=>{arm();count+=chunk.length;if(count>maximum){finish(new TransportFault('BODY_LIMIT'));res.destroy();return;}if(!create)chunks.push(Buffer.from(chunk));});
+      res.once('error',()=>finish(new TransportFault('BODY_INVALID')));res.once('aborted',()=>finish(new TransportFault('BODY_INVALID')));
+      res.once('end',()=>{if(!res.complete||declared!==undefined&&Number(declared)!==count)return finish(new TransportFault('BODY_INVALID'));if(status>=400)return finish(new TransportFault('NETWORK_AMBIGUOUS'));finish(undefined,{status,bytes:Buffer.concat(chunks),...(postId?{postId}:{})});});
+     });req.maxHeadersCount=0;
+     const abort=()=>finish(new TransportFault('TIMEOUT'));budget.signal.addEventListener('abort',abort,{once:true});
+     function finish(error?:unknown,value?:{status:number;bytes:Buffer;postId?:string}){if(done)return;done=true;clearTimeout(idle);clearTimeout(headerTimer);budget.signal.removeEventListener('abort',abort);if(error){readyReject(error);no(safeFault(error,sent));}else if(value)yes(value);req.destroy();agent.destroy();}
+     req.once('error',error=>finish(error));
+     void(async()=>{try{await ready;budget.check();await check();await send(write);req.end(()=>{if(!responseStarted)headerTimer=setTimeout(()=>finish(new TransportFault('TIMEOUT')),LIMITS.headerMs);});}catch(e){finish(e);}})();
+     async function write(bytes:Uint8Array){await check();budget.check();if(!bytes.byteLength)return;await budget.phase(LIMITS.uploadIdleMs,signal=>new Promise<void>((resolve,reject)=>{const aborted=()=>{req.destroy();reject(new TransportFault('TIMEOUT'));};signal.addEventListener('abort',aborted,{once:true});req.write(bytes,e=>{signal.removeEventListener('abort',aborted);if(e)reject(new TransportFault('NETWORK_AMBIGUOUS'));else resolve();});}));}
+    });
+
+}
+
+/** Closed LinkedIn connection operations: never a generic URL/header/Rest.li client. */
+export function linkedInConnectionTransport(options:{profile:LinkedInProfile;signal:AbortSignal;check:()=>Promise<void>;testNetwork?:NetworkTestHooks|undefined}){
+ assertTestHooks(options.testNetwork);
+ const profile=reviewedLinkedInProfile(options.profile);
+ async function perform(operation:'TOKEN'|'IDENTITY'|'DISCOVERY',secret:SensitiveValue,schema:z.ZodType){
+  const budget=new Budget(LIMITS.smallMs,Infinity,options.signal);
+  try{
+   const check=async()=>{budget.check();reviewedLinkedInProfile(profile);await budget.phase(LIMITS.smallMs,options.check);budget.check();};
+   await check();
+   const value=secret.reveal();if(!value||Buffer.byteLength(value)>8192||/[\p{Cc}\p{Cs}]/u.test(value))fault('INVALID');
+   const token=operation==='TOKEN',url=checkedURL(token?'https://www.linkedin.com/oauth/v2/accessToken':operation==='IDENTITY'?'https://api.linkedin.com/v2/userinfo':'https://api.linkedin.com'+LINKEDIN_AUTH_PATH,[token?'www.linkedin.com':'api.linkedin.com']);
+   const headers:Record<string,string>={Accept:'application/json','Accept-Encoding':'identity',Connection:'close'};
+   let body:Buffer|undefined;
+   if(token){const credentials=profile.secrets();body=Buffer.from(new URLSearchParams({grant_type:'authorization_code',code:value,redirect_uri:profile.redirectURI,client_id:credentials.clientId,client_secret:credentials.clientSecret.reveal()}).toString());if(body.length>LIMITS.structured)fault('BODY_LIMIT');headers['Content-Type']='application/x-www-form-urlencoded';headers['Content-Length']=String(body.length);}
+   else headers.Authorization='Bearer '+value;
+   if(operation==='DISCOVERY'){headers['Content-Type']='application/json';headers['Linkedin-Version']=profile.version;headers['X-Restli-Protocol-Version']='2.0.0';headers['X-RestLi-Method']='BATCH_FINDER';}
+   if(Object.entries(headers).reduce((n,[k,v])=>n+Buffer.byteLength(k)+Buffer.byteLength(v)+4,0)>LIMITS.requestHeaders)fault('BODY_LIMIT');
+   const responseClass=operation==='DISCOVERY'?'STATUS_RESPONSE':'SMALL_JSON_RESPONSE';
+   const result=await secureRequest({url,method:token?'POST':'GET',headers,budget,responseClass,create:false,testNetwork:options.testNetwork,check,onReady:()=>undefined,send:async write=>{if(body)await write(body);}});
+   await check();if(result.status!==200)fault('BODY_INVALID');return ingestJson(result.bytes,schema,responseClass);
+  }catch(error){throw safeFault(error,false);}finally{budget.dispose();}
+ }
+ return Object.freeze({exchange:(code:SensitiveValue,schema:z.ZodType)=>perform('TOKEN',code,schema),identity:(access:SensitiveValue,schema:z.ZodType)=>perform('IDENTITY',access,schema),organizations:(access:SensitiveValue,schema:z.ZodType)=>perform('DISCOVERY',access,schema)});
+}

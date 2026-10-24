@@ -17,14 +17,14 @@ export const providerResultSchema=z.discriminatedUnion('status',[
 ]);
 export type ProviderResult=z.infer<typeof providerResultSchema>;
 /** Trusted server bridge, never supplied by browser/post data. */
-export type PublishingConnection={binding:Readonly<Binding>;personURN:string|null;authority:()=>Promise<Authority>;credentials:()=>Promise<CredentialGrant>;now:()=>Promise<Date>};
+export type PublishingConnection={binding:Readonly<Binding>;subject?:string;personURN:string|null;authority:()=>Promise<Authority>;credentials:()=>Promise<CredentialGrant>;now:()=>Promise<Date>};
 export type PreparedPublication={publish:(signal:AbortSignal)=>Promise<unknown>;dispose:()=>void};
 export class PreDispatchFailure extends Error {
  constructor(readonly category:'VALIDATION'|'AUTHORIZATION'|'CAPABILITY'|'TRANSPORT'='AUTHORIZATION',readonly code:'INVALID'|'ACCESS_LOST'|'UNSUPPORTED'|'UNAVAILABLE'='UNAVAILABLE'){super('Publication was not dispatched.');this.name='PreDispatchFailure';this.stack='PreDispatchFailure: Publication was not dispatched.';}
 }
 export interface PublishingProvider{
- readonly mode:'test';readonly provider:SocialProviderId;readonly platform:keyof SocialPack;readonly capabilityRef:string;readonly requiredScopes:readonly string[];
- /** LinkedIn-only test registration seam; production registry stays empty. */
+ readonly mode:'official'|'test';readonly provider:SocialProviderId;readonly platform:keyof SocialPack;readonly capabilityRef:string;readonly requiredScopes:readonly string[];
+ /** LinkedIn-only prepared dispatch seam; production registry stays empty by default. */
  prepare?(intent:ProviderIntent,connection:PublishingConnection):Promise<PreparedPublication>;
  validate(intent:Omit<ProviderIntent,'operationId'|'intentHash'>):void;
  publish(intent:ProviderIntent,signal:AbortSignal):Promise<unknown>;
