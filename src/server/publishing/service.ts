@@ -1,3 +1,6 @@
+import { decryptToken,loadTokenKey,type TokenKey } from '../social/crypto';
+import { linkedinConnectionPerson } from './linkedin-text';
+import { LINKEDIN_SCOPES } from '../provider-security/linkedin';
 import { createHash,randomBytes,randomUUID } from 'node:crypto';
 import { sql,type Kysely,type Selectable } from 'kysely';
 import { z } from 'zod';
@@ -13,16 +16,16 @@ import { socialPackSchema,type SocialPack } from '../../features/ai/model';
 import { factSnapshotSchema } from '../../features/content/model';
 import { selectionSchema,publishCommandSchema,PUBLISH_LIMITS,type PublishSelection,type PublishPreview,type PublishStatus,type PublishingPage,type ApprovedCopy } from '../../features/publishing/model';
 import { canonical,publishHash,publishAction,commandDigest,requireTransition,PublishingError } from './policy';
-import { boundedProvider,normalizedResult,type PublishingProvider,type PublishAsset,type ProviderIntent,type ProviderResult } from './provider';
+import { boundedProvider,normalizedResult,type PublishingProvider,type PublishAsset,type ProviderIntent,type ProviderResult,PreDispatchFailure,type PreparedPublication,type PublishingConnection } from './provider';
 import type { PublishState } from './schema';
 type Db=Kysely<DatabaseSchema>;type Operation=Selectable<DatabaseSchema['publish_operations']>;
 const json=(v:unknown):unknown=>typeof v==='string'?JSON.parse(v):v;
 const clock=async(tx:Db)=>(await sql<{now:Date}>`SELECT CURRENT_TIMESTAMP(3) AS now`.execute(tx)).rows[0]!.now;
 const platformProvider={FACEBOOK:'META',INSTAGRAM:'META',TIKTOK:'TIKTOK',YOUTUBE:'YOUTUBE',LINKEDIN:'LINKEDIN'} as const;
 async function audit(tx:Db,actor:AuthorizationContext|null,id:string,action:string){await tx.insertInto('audit_logs').values({id:randomUUID(),actor_user_id:actor?.userId??null,target_user_id:null,session_id:actor?.sessionId??null,action:`publish.${action}`,outcome:action==='validation_rejected'?'denied':'success',correlation_id:randomUUID(),metadata_safe_json:JSON.stringify({reasonCode:`publish.${action}`,changedFields:[`record:${z.uuid().parse(id)}`]}),ip_hash:null}).execute();}
-export function createPublishingService(db:Db,options:{environment:'test'|'development'|'production';providers:ReadonlyMap<keyof SocialPack,PublishingProvider>;storage?:MediaStorage}){
+export function createPublishingService(db:Db,options:{environment:'test'|'development'|'production';providers:ReadonlyMap<keyof SocialPack,PublishingProvider>;storage?:MediaStorage;tokenKey?:()=>TokenKey}){
  const providers=new Map(options.providers);
- for(const [platform,p]of providers)if(options.environment!=='test'||p.mode!=='test'||platform!==p.platform||p.provider!==platformProvider[platform]||!/^[A-Za-z0-9._:/-]{1,64}$/.test(p.capabilityRef))throw new PublishingError('CAPABILITY_UNAVAILABLE');
+ for(const [platform,p]of providers)if(options.environment!=='test'||p.mode!=='test'||platform!==p.platform||p.provider!==platformProvider[platform]||p.prepare&&p.provider!=='LINKEDIN'||!/^[A-Za-z0-9._:/-]{1,64}$/.test(p.capabilityRef))throw new PublishingError('CAPABILITY_UNAVAILABLE');
  function capability(platform:keyof SocialPack){const p=providers.get(platform);if(!p)throw new PublishingError('CAPABILITY_UNAVAILABLE');return p;}
  async function transaction<T>(fn:(tx:Db)=>Promise<T>){try{return await db.transaction().execute(fn);}catch(e){if(e instanceof PublishingError||e instanceof AuthorizationError)throw e;if(e&&typeof e==='object'&&'code'in e&&e.code==='ER_DUP_ENTRY')throw new PublishingError('CONFLICT');throw new PublishingError('UNAVAILABLE',503);}}
  async function authority(tx:Db,raw:SensitiveValue){const state=await requireAuthenticatedUser(tx,raw);requirePermission(state.context,'content.publish');requirePermission(state.context,'content.read');requirePermission(state.context,'integrations.read');return state;}
@@ -43,7 +46,7 @@ export function createPublishingService(db:Db,options:{environment:'test'|'devel
   const authorization=await tx.selectFrom('social_authorizations').selectAll().where('id','=',destination.authorization_id).where('brand_id','=',BRAND_ID).where('provider','=',destination.provider).forUpdate().executeTakeFirst();
   if(!authorization||authorization.version!==input.authorizationVersion||authorization.status!=='CONNECTED'||authorization.expires_at<=now||authorization.refresh_lease!==null)throw new PublishingError('CONFLICT');
   const allowedKind={FACEBOOK:'PAGE',INSTAGRAM:'INSTAGRAM_PROFESSIONAL',TIKTOK:'TIKTOK_ACCOUNT',YOUTUBE:'YOUTUBE_CHANNEL',LINKEDIN:'LINKEDIN_ORGANIZATION'}[input.platform];if(destination.kind!==allowedKind)throw new PublishingError('INVALID');
-  const provider=capability(input.platform),scopes=z.array(z.string()).max(30).parse(json(authorization.scopes_json));if(provider.requiredScopes.some(s=>!scopes.includes(s)))throw new PublishingError('CAPABILITY_UNAVAILABLE');
+  const provider=capability(input.platform);if(provider.prepare&&authorization.selected_id!==destination.id)throw new PublishingError('CONFLICT');const scopes=z.array(z.string()).max(30).parse(json(authorization.scopes_json));if(provider.requiredScopes.some(s=>!scopes.includes(s)))throw new PublishingError('CAPABILITY_UNAVAILABLE');
   const credential=await tx.selectFrom('social_credentials').select('version').where('authorization_id','=',authorization.id).where('purpose','=','access').forShare().executeTakeFirst();if(!credential||credential.version!==authorization.version)throw new PublishingError('CONFLICT');
   const references=await tx.selectFrom('content_revision_media').selectAll().where('revision_id','=',approved.id).orderBy('position').limit(5).execute();if(references.length>4)throw new PublishingError('MEDIA_UNAVAILABLE');
   const assets:PublishAsset[]=[];if(references.length)await tx.selectFrom('media_storage_guard').select('id').where('id','=',1).forUpdate().executeTakeFirstOrThrow();
@@ -64,6 +67,13 @@ export function createPublishingService(db:Db,options:{environment:'test'|'devel
   await tx.insertInto('publish_events').values({operation_id:op.id,sequence,state,boundary:unknown?'UNCONFIRMED':state==='DISPATCHING'?'LOCAL':'REMOTE',observed_at:now,error_category:unknown?'UNCONFIRMED':failed?result.category:null,safe_error_code:unknown?'OUTCOME_UNKNOWN':failed?result.code:null,remote_publication_id:result&&'publicationId'in result&&result.publicationId?Buffer.from(result.publicationId):null,remote_processing_id:result&&'processingId'in result&&result.processingId?Buffer.from(result.processingId):null,published_at:result?.status==='PUBLISHED'?new Date(result.publishedAt):null}).execute();
   const changed=await tx.updateTable('publish_operations').set({state,version:op.version+1,last_event_sequence:sequence,updated_at:now}).where('id','=',op.id).where('version','=',op.version).executeTakeFirst();if(Number(changed.numUpdatedRows)!==1)throw new PublishingError('CONFLICT');await audit(tx,actor,op.id,state.toLowerCase());
  }
+ async function localFailure(id:string,error:PreDispatchFailure){await transaction(async tx=>{
+  const op=await tx.selectFrom('publish_operations').selectAll().where('id','=',id).forUpdate().executeTakeFirstOrThrow();
+  if(!['CREATED','DISPATCHING'].includes(op.state))throw new PublishingError('CONFLICT');requireTransition(op.state,'FAILED');const now=await clock(tx),sequence=op.last_event_sequence+1;
+  if(sequence>PUBLISH_LIMITS.events)throw new PublishingError('CONFLICT');
+  await tx.insertInto('publish_events').values({operation_id:id,sequence,state:'FAILED',boundary:'LOCAL',observed_at:now,error_category:error.category,safe_error_code:error.code,remote_publication_id:null,remote_processing_id:null,published_at:null}).execute();
+  const changed=await tx.updateTable('publish_operations').set({state:'FAILED',version:op.version+1,last_event_sequence:sequence,updated_at:now}).where('id','=',id).where('version','=',op.version).executeTakeFirst();if(Number(changed.numUpdatedRows)!==1)throw new PublishingError('CONFLICT');await audit(tx,null,id,'failed');
+ });}
  async function read(raw:SensitiveValue,id:string){return transaction(async tx=>{const{context}=await authority(tx,raw);requirePermission(context,'publishing_logs.read');return statusView(tx,z.uuid().parse(id));});}
  return{
   async page(raw:SensitiveValue,postId:string):Promise<PublishingPage>{return transaction(async tx=>{
@@ -92,14 +102,32 @@ export function createPublishingService(db:Db,options:{environment:'test'|'devel
     await audit(tx,context,id,'initiated');return{id,fresh:true,proofId:bound.id};
    });
    if(!admission.fresh)return read(raw,admission.id);
-   const claimed=await transaction(async tx=>{await lockParents(tx,ids);const{context,state}=await authority(tx,raw);const resolved=await resolve(tx,context,command,new Date(command.createdAt),state.now,ids);if(resolved.hash.toString('hex')!==command.intentHash)throw new PublishingError('CONFLICT');
+   let prepared:PreparedPublication|undefined;
+   const connection=async():Promise<PublishingConnection>=>{
+    const inspect=()=>transaction(async tx=>{await lockParents(tx,ids);const{context,state}=await authority(tx,raw);const resolved=await resolve(tx,context,command,new Date(command.createdAt),state.now,ids);if(resolved.hash.toString('hex')!==command.intentHash)throw new PublishingError('CONFLICT');
+     const proofRow=await tx.selectFrom('auth_challenges').selectAll().where('id','=',admission.proofId).forShare().executeTakeFirst();if(!proofRow||proofRow.revoked_at||!proofRow.consumed_at||proofRow.expires_at<=state.now||proofRow.user_id!==context.userId||proofRow.bound_session_id!==state.row.id||proofRow.action_code!==publishAction(command))throw new PublishingError('CONFLICT');
+     const a=resolved.authorization,d=resolved.destination,c=await tx.selectFrom('social_credentials').selectAll().where('authorization_id','=',a.id).where('purpose','=','access').forShare().executeTakeFirstOrThrow();if(c.version!==a.version||a.selected_id!==d.id||LINKEDIN_SCOPES.some(scope=>!(json(a.scopes_json) as string[]).includes(scope)))throw new PublishingError('CONFLICT');
+     return{resolved,credential:c,now:state.now};});
+    const initial=await inspect(),a=initial.resolved.authorization;
+    const b={workspaceId:BRAND_ID,operationId:admission.id,snapshotId:admission.id,authorizationId:a.id,destinationId:initial.resolved.destination.id,authorizationVersion:a.version,destination:initial.resolved.destination.remote_id,provider:'LINKEDIN' as const,capabilityRef:initial.resolved.provider.capabilityRef,intentHash:command.intentHash,media:false};
+    const check=async()=>{const v=await inspect();if(v.resolved.authorization.subject!==a.subject||v.resolved.authorization.id!==a.id||v.credential.version!==a.version)throw new PreDispatchFailure();return v;};
+    return{binding:b,personURN:linkedinConnectionPerson(a.subject),authority:async()=>{const v=await check();return{binding:b,status:v.resolved.authorization.status,expiresAt:+v.resolved.authorization.expires_at,refreshLease:!!v.resolved.authorization.refresh_lease,scopes:json(v.resolved.authorization.scopes_json) as string[]};},credentials:async()=>{const v=await check();return{binding:b,audience:'api.linkedin.com',requestClass:'STATIC_PROVIDER_API_ENDPOINT',expiresAt:Math.min(+v.resolved.authorization.expires_at,Date.now()+30000),access:decryptToken(v.credential,(options.tokenKey??(()=>loadTokenKey(process.env)))(),{id:a.id,provider:'LINKEDIN',purpose:'access',version:a.version})};},now:async()=>transaction(tx=>clock(tx))};
+   };
+   const candidate=capability(command.platform);
+   if(candidate.prepare){try{
+    const source=await connection();const snapshot=await transaction(tx=>tx.selectFrom('publish_snapshots').selectAll().where('id','=',admission.id).executeTakeFirstOrThrow());
+    prepared=await candidate.prepare({operationId:admission.id,provider:'LINKEDIN',platform:'LINKEDIN',destination:snapshot.destination_remote_id.toString(),content:json(snapshot.content_json) as ApprovedCopy,assets:[],intentHash:command.intentHash},source);
+   }catch{await localFailure(admission.id,new PreDispatchFailure());return read(raw,admission.id);}}
+   let claimed;
+   try{claimed=await transaction(async tx=>{await lockParents(tx,ids);const{context,state}=await authority(tx,raw);const resolved=await resolve(tx,context,command,new Date(command.createdAt),state.now,ids);if(resolved.hash.toString('hex')!==command.intentHash)throw new PublishingError('CONFLICT');
     const proofRow=await tx.selectFrom('auth_challenges').selectAll().where('id','=',admission.proofId).forUpdate().executeTakeFirst();if(!proofRow||proofRow.action_code!==publishAction(command)||proofRow.user_id!==context.userId||proofRow.bound_session_id!==state.row.id||proofRow.auth_version!==state.identity.user.auth_version||!proofRow.consumed_at||proofRow.revoked_at||proofRow.expires_at<=state.now)throw new PublishingError('STEP_UP_REQUIRED',403);
     const op=await tx.selectFrom('publish_operations').selectAll().where('id','=',admission.id).forUpdate().executeTakeFirstOrThrow();if(op.state!=='CREATED')throw new PublishingError('CONFLICT');
     const assets=await tx.selectFrom('publish_assets').selectAll().where('snapshot_id','=',admission.id).orderBy('position').forShare().execute();if(assets.length!==resolved.assets.length||assets.some(m=>m.protected_until<=state.now))throw new PublishingError('MEDIA_UNAVAILABLE');
     await tx.updateTable('publish_operations').set({state:'DISPATCHING',dispatch_started_at:state.now,dispatch_deadline:new Date(+state.now+PUBLISH_LIMITS.deadlineMs),dispatch_claim_hash:publishHash(randomBytes(32).toString('hex'))}).where('id','=',op.id).execute();await append(tx,op,'DISPATCHING',context,state.now);
     return{provider:resolved.provider,intent:{operationId:op.id,provider:resolved.destination.provider,platform:command.platform,destination:resolved.destination.remote_id,content:resolved.content,assets:resolved.assets,intentHash:command.intentHash} satisfies ProviderIntent};
    });
-   let result:ProviderResult;try{const value=await boundedProvider(signal=>claimed.provider.publish(claimed.intent,signal),PUBLISH_LIMITS.deadlineMs);result=normalizedResult(value,new Date());}catch{result={status:'UNKNOWN'};}
+   }catch(error){prepared?.dispose();if(!prepared)throw error;await localFailure(admission.id,new PreDispatchFailure('AUTHORIZATION','ACCESS_LOST'));return read(raw,admission.id);}
+   let result:ProviderResult;try{const value=await boundedProvider(signal=>prepared?prepared.publish(signal):claimed.provider.publish(claimed.intent,signal),PUBLISH_LIMITS.deadlineMs);result=normalizedResult(value,new Date());}catch(error){if(prepared&&error instanceof PreDispatchFailure){await localFailure(admission.id,error);return read(raw,admission.id);}result={status:'UNKNOWN'};}finally{prepared?.dispose();}
    try{await transaction(async tx=>{const op=await tx.selectFrom('publish_operations').selectAll().where('id','=',admission.id).forUpdate().executeTakeFirstOrThrow();if(op.state!=='DISPATCHING')throw new PublishingError('CONFLICT');await append(tx,op,result.status,null,await clock(tx),result);});}catch{throw new PublishingError('OUTCOME_UNKNOWN');}
    return read(raw,admission.id);
   },
