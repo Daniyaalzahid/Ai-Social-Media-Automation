@@ -63,10 +63,17 @@ export function resolveDatabaseConfiguration(source: EnvironmentSource, purpose:
   if (mode === 'production' && isIP(host)) throw new EnvironmentValidationError([key, 'verified database hostname required']);
   if (mode === 'production' && purpose === 'bootstrap') {
     if (source.APP_ENV !== 'production' || source.NODE_ENV !== 'production') throw new EnvironmentValidationError(['APP_ENV', 'NODE_ENV']);
-    let runtimeUrl: URL;
-    try { runtimeUrl = new URL(source.DATABASE_URL ?? ''); } catch { throw new EnvironmentValidationError(['DATABASE_URL']); }
-    if (runtimeUrl.protocol !== 'mysql:' || runtimeUrl.hostname !== url.hostname || (runtimeUrl.port || '3306') !== (url.port || '3306')
-      || runtimeUrl.pathname !== url.pathname || runtimeUrl.username === url.username) throw new EnvironmentValidationError(['separate matching bootstrap database identity required']);
+    const flag = source.HOSTINGER_SINGLE_DB_USER_PROVISIONING;
+    if (flag !== undefined && flag !== 'true' && flag !== 'false') throw new EnvironmentValidationError(['HOSTINGER_SINGLE_DB_USER_PROVISIONING']);
+    if (source.NODE_TLS_REJECT_UNAUTHORIZED === '0') throw new EnvironmentValidationError(['verified database TLS required']);
+    // This exception is administrative only. Runtime never consumes the flag or
+    // requires DATABASE_MIGRATION_URL; the default still requires a separate user.
+    const runtime = resolveDatabaseConfiguration(source, 'runtime');
+    const single = flag === 'true';
+    if (runtime.host !== host || runtime.port !== Number(url.port || 3306) || runtime.database !== database
+      || (single ? runtime.user !== user || runtime.password !== password : runtime.user === user)) {
+      throw new EnvironmentValidationError(['matching production administrative database identity required']);
+    }
   }
   const port = Number(url.port || 3306);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new EnvironmentValidationError([key]);

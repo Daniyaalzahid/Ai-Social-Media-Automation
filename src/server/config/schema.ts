@@ -25,6 +25,7 @@ const schema = z.object({
   APP_URL: appUrl,
   DATABASE_URL: databaseUrl,
   DATABASE_MIGRATION_URL: databaseUrl,
+  HOSTINGER_SINGLE_DB_USER_PROVISIONING: z.enum(['true', 'false']).optional(),
   DEV_DATABASE_URL: databaseUrl,
   DEV_DATABASE_MIGRATION_URL: databaseUrl,
   TEST_DATABASE_URL: databaseUrl,
@@ -73,6 +74,7 @@ export function validateEnvironment(source: EnvironmentSource): ServerEnvironmen
   const runtime = cleaned.NODE_ENV ?? 'development';
   const mode = cleaned.APP_ENV ?? runtime;
   const fields: string[] = [];
+  if (source.HOSTINGER_SINGLE_DB_USER_PROVISIONING !== undefined && !['true', 'false'].includes(source.HOSTINGER_SINGLE_DB_USER_PROVISIONING)) fields.push('HOSTINGER_SINGLE_DB_USER_PROVISIONING');
   if (!['development', 'test', 'production'].includes(runtime)) fields.push('NODE_ENV');
   if (cleaned.NODE_ENV && mode !== runtime) fields.push('APP_ENV', 'NODE_ENV');
   for (const key of Object.keys(cleaned)) {

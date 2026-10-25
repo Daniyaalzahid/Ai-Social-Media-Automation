@@ -11,7 +11,7 @@ describe('repository security guardrails', () => {
   it('keeps the example trackable and names-only', () => {
     expect(spawnSync('git', ['check-ignore', '--no-index', '.env.example']).status).toBe(1);
     const lines = readFileSync('.env.example', 'utf8').split(/\r?\n/).filter(Boolean);
-    expect(lines).toHaveLength(32);
+    expect(lines).toHaveLength(33);
     expect(lines.every((line) => /^[A-Z][A-Z0-9_]*=$/.test(line))).toBe(true);
     expect(lines.some((line) => line.startsWith('NEXT_PUBLIC_'))).toBe(false);
   });

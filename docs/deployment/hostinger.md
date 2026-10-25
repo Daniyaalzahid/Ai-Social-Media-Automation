@@ -71,3 +71,102 @@ no password environment variable or default credential is introduced. Do not run
 second command when provisioning failed. Remove administrative credentials from the
 operator environment afterward; the web account retains only reviewed runtime grants.
 LinkedIn and all other social providers remain disabled/unverified.
+
+## HOSTINGER BUSINESS WEB HOSTING SINGLE-DB-USER COMPATIBILITY MODE
+
+Hostinger's reviewed Business Web Hosting constraint permits only one MySQL account
+per database through hPanel. This administrative exception supports that product;
+the separate runtime/admin two-user model above remains the default and preferred
+model. No account name, host, password or database name is hardcoded in the application.
+
+The sole opt-in is HOSTINGER_SINGLE_DB_USER_PROVISIONING=true. Omitted or exact false
+retains different decoded usernames. Only exact lowercase true enables this mode;
+empty strings, whitespace-padded values, 1/0, yes/on and other spellings are rejected
+by administrative admission. In this mode BOTH URLs remain mandatory and must identify
+the same hostname, port, schema, decoded username AND decoded password. Separate users
+or conflicting passwords are rejected in single-user mode; use the default mode for
+separate users. Both complete URLs are validated. Exact production selectors and
+--confirm-production-database=<EXACT_DATABASE_NAME> remain required for provisioning.
+TLS, DNS-host restrictions, live account/database checks, journals/checksums, canonical
+seeds and production db:migrate/db:seed prohibitions are unchanged. No grant-management
+SQL, reset/drop/truncate option, down migration or startup migration is introduced.
+
+Initial provisioning, during a separately authorized deployment:
+
+1. Keep the web service stopped/inaccessible while the single account has elevated
+   privileges. Confirm backups, MySQL/TLS compatibility and the actual hPanel privilege
+   controls; the single-account limitation does not establish privilege-edit capability.
+2. In hPanel temporarily enable only the provisioning privileges listed below for the
+   selected database account. Do not use global privileges or GRANT OPTION.
+3. In the PRIVATE administrative environment set APP_ENV=production, NODE_ENV=production,
+   both DATABASE_URL and DATABASE_MIGRATION_URL to the same reviewed account/target and
+   HOSTINGER_SINGLE_DB_USER_PROVISIONING=true. Retain the verified CA configuration.
+4. Run npm run db:provision:production -- --confirm-production-database=<EXACT_DATABASE_NAME>.
+   Require success: all twelve migrations, complete matching journals/checksums and
+   the exact canonical 32-permission catalog. Stop on failure; do not blind-retry DDL.
+5. With the flag still true, run npm run owner:bootstrap separately in its required
+   secure interactive TTY. Existing confirmation, complete-journal/catalog and one-time
+   Owner checks remain. No Owner is created by provisioning; future migrations do not
+   rerun this consumed bootstrap step.
+6. Close administrative connections. In hPanel remove CREATE, ALTER, INDEX and REFERENCES,
+   and remove any other unused privileges (including DROP, views, routines, triggers,
+   events, EXECUTE, temporary tables and explicit table locks). Verify actual grants
+   against the runtime requirements below. This repository does not change grants.
+7. Remove DATABASE_MIGRATION_URL and the compatibility flag from the NORMAL WEB runtime
+   environment. Runtime configuration requires only DATABASE_URL, never the migration
+   URL or this flag. Restart the managed web service with fresh database connections
+   after privilege reduction. Complete Owner MFA through the normal restricted flow.
+   Keep the administrative configuration private and available only for future maintenance.
+
+Future reviewed migrations: enter maintenance/stop web access; back up; temporarily
+restore only needed schema privileges in hPanel; supply both URLs and the exact true
+flag in the administrative environment; run the reviewed provisioning command with
+exact database confirmation; verify journals/catalog; close admin connections; reduce
+grants immediately; remove the administrative URL/flag from web configuration; restart
+with fresh runtime connections. Do not rerun Owner bootstrap. The reviewed future
+migration set may require a newly reviewed privilege list; do not pregrant privileges.
+
+Current privilege requirements (source-derived, not Hostinger execution evidence):
+
+| Privilege | Normal runtime | Current 0000–0011 provisioning + seeding |
+| --- | --- | --- |
+| SELECT | Yes: authorization, application data, clocks and identity | Yes: catalogs, metadata, journals, INSERT...SELECT |
+| INSERT | Yes: admitted application records/events | Yes: canonical data, migration journals/lock-row initialization |
+| UPDATE | Yes: state/version/leases and duplicate-key upserts | Yes: checksums, canonical seed upserts |
+| DELETE | Yes: bounded auth_rate_limits cleanup, social_transactions cleanup, social_credentials rotation/removal | Yes: existing canonical role_permissions reseeding |
+| CREATE | No | Yes: tables, checksum/journal/lock tables in the existing database |
+| ALTER | No | Yes: constraints, columns and unique keys, including ALTER TABLE...DROP CHECK |
+| INDEX | No | Yes: standalone CREATE INDEX in migration0000 |
+| REFERENCES | No new foreign keys at runtime | Yes: foreign keys in table definitions and ALTER TABLE |
+| EXECUTE | No | No stored routines; built-in functions are not stored-routine EXECUTE |
+| CREATE TEMPORARY TABLES | No | No |
+| LOCK TABLES | No | No: InnoDB row locks/transactions and Kysely GET_LOCK/RELEASE_LOCK are not LOCK TABLES |
+| DROP / CREATE VIEW / CREATE ROUTINE / ALTER ROUTINE / TRIGGER / EVENT | No | No current statement needs these grants; DROP CHECK uses ALTER, not DROP TABLE |
+
+All twelve SQL files were inspected: only CREATE TABLE/INDEX, ALTER TABLE and INSERT
+statements occur; SELECT/UPDATE/DELETE also arise from the existing migration/seed
+code. No CREATE DATABASE, stored routine, trigger, view or event is installed. The
+production database must already exist. Session UTC/STRICT_ALL_TABLES initialization
+needs no global server-setting privilege. Older MySQL versions have different locking
+read privilege rules: verify the actual supported engine/version; MySQL8.0.22+ allows
+SELECT-only locking reads. Do not compensate for an incompatible server by granting
+schema administration to normal runtime.
+
+The privilege-type union is not a recommendation for blanket CRUD on every table.
+Where hPanel permits table/column scoping, keep catalogs and installation_state read-only,
+audit_logs/security_events and immutable publishing/content history append-only, and
+DELETE limited to the three current cleanup/rotation tables above. No runtime grants
+are needed on schema_migration_checksums or Kysely migration tables. The existing local
+runtime grant map in scripts/local-mysql.py records broader reviewed DML capabilities,
+including some reserved deletes; current query-derived DELETE needs are narrower.
+If only database-wide DML is available, record that loss of table/column enforcement:
+the single account can then mutate immutable history/catalog data if compromised.
+If hPanel cannot remove schema privileges at all, do not start normal public runtime
+under those privileges; obtain a separately reviewed hosting-compatible operational
+solution. This mode does not claim that changing a flag reduces database privileges.
+
+Tradeoff: web and administrative credentials identify the same account, so privilege
+separation is temporal and operational rather than enforced by separate identities.
+Maintenance isolation, actual grant reduction, closing old connections and restart are
+mandatory. Environment-variable presence alone never enables LinkedIn or another
+provider; all provider enablement/verification gates remain unchanged.

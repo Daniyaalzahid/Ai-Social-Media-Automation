@@ -14,8 +14,10 @@ export function productionProvisioningConfiguration(source: EnvironmentSource, c
     // Validate BOTH complete URLs, including passwords/query/fragment/isolation guards.
     // Resolving runtime configuration does not open a runtime connection.
     const runtime = resolveDatabaseConfiguration(source, 'runtime');
+    // Bootstrap admission enforces separate users by default, or the explicit
+    // reviewed Hostinger same-user/same-password administrative exception.
     const admin = resolveDatabaseConfiguration(source, 'bootstrap');
-    if (!runtime.tls || !admin.tls || runtime.host !== admin.host || runtime.port !== admin.port || runtime.database !== admin.database || runtime.user === admin.user || confirmation !== '--confirm-production-database=' + admin.database) throw unavailable();
+    if (!runtime.tls || !admin.tls || runtime.host !== admin.host || runtime.port !== admin.port || runtime.database !== admin.database || confirmation !== '--confirm-production-database=' + admin.database) throw unavailable();
     return admin;
   } catch { throw unavailable(); }
 }
