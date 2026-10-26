@@ -4,6 +4,7 @@ import type { DatabaseSchema } from './schema.ts';
 
 export type DatabaseEngine = 'mysql' | 'mariadb';
 export function admitEngine(version: string, vendor?: string): DatabaseEngine {
+  if (/^(?:5\.5\.5-)?11\.8\.9-MariaDB(?:-|$)/.test(version)) return 'mariadb';
   if (/^(?:5\.5\.5-)?11\.4\.(\d+)-MariaDB(?:-|$)/.test(version)) {
     const patch = Number(/11\.4\.(\d+)/.exec(version)![1]);
     if (patch >= 13) return 'mariadb';
@@ -12,9 +13,9 @@ export function admitEngine(version: string, vendor?: string): DatabaseEngine {
     if (vendor !== undefined && !/^(MySQL (?:Community|Enterprise|Cluster) Server(?:.*)|Ubuntu|\(Ubuntu\))$/.test(vendor)) throw new Error('Unreviewed database vendor.');
     if (m && (m[1] === '9' || Number(m[2]) > 0 || Number(m[3]) >= 17)) return 'mysql';
   }
-  throw new Error('Unsupported database engine/version; reviewed MySQL or MariaDB 11.4.13–11.4.x required.');
+  throw new Error('Unsupported database engine/version; reviewed MySQL or MariaDB 11.4.13–11.4.x or exact 11.8.9 required.');
 }
-export function engineSummary(version:string) { return (/mariadb/i.test(version) ? 'MariaDB ' : 'MySQL/unknown ') + (version.match(/11\.4\.\d+/)?.[0] ?? version.match(/\d+\.\d+\.\d+/)?.[0] ?? 'UNKNOWN'); }
+export function engineSummary(version:string) { return (/mariadb/i.test(version) ? 'MariaDB ' : 'MySQL/unknown ') + (version.replace(/^5\.5\.5-/, '').match(/\d+\.\d+\.\d+/)?.[0] ?? 'UNKNOWN'); }
 export async function detectEngine(db: Kysely<DatabaseSchema>, report?: (summary:string)=>void) {
   const row = (await sql<{version:string;vendor:string}>`SELECT VERSION() AS version, @@version_comment AS vendor`.execute(db)).rows[0];
   if (!row || typeof row.version !== 'string') throw new Error('Database engine admission unavailable.');

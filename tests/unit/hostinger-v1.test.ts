@@ -16,7 +16,7 @@ it.each(['127.0.0.2','192.0.2.1','[::1]','database.example.test','127.0.0.1.evil
 it.each(['3307','1','65535'])('rejects local port %s',port=>{const env=source(),url=new URL(env.DATABASE_URL);url.port=port;expect(()=>resolveDatabaseConfiguration({...env,DATABASE_URL:url.href})).toThrow();});
 it.each([{APP_ENV:'test'},{NODE_ENV:'development'},{APP_ENV:undefined},{NODE_ENV:undefined},{NODE_TLS_REJECT_UNAUTHORIZED:'0'},{DEV_DATABASE_URL:'synthetic'},{TEST_DATABASE_URL:'synthetic'},{DEV_DATABASE_MIGRATION_URL:'synthetic'},{TEST_DATABASE_MIGRATION_URL:'synthetic'},{TEST_DATABASE_RESET_ALLOWED:'1'}])('fails closed on production isolation %#',patch=>{expect(()=>resolveDatabaseConfiguration({...source(),...patch})).toThrow();});
 it('retains verified DNS production TLS and rejects query overrides',()=>{const base=source(),url=new URL(base.DATABASE_URL);url.hostname='database.example.test';const env={...base,HOSTINGER_MANAGED_LOCAL_DB:'false',DATABASE_URL:url.href};expect(resolveDatabaseConfiguration(env)).toMatchObject({tls:true});expect(()=>resolveDatabaseConfiguration({...env,DATABASE_URL:env.DATABASE_URL+'?ssl=false'})).toThrow();});
-it.each(['10.11.10-MariaDB','11.4.12-MariaDB','11.5.1-MariaDB','12.0.1-MariaDB','5.7.40','8.0.16','unknown','postgresql'])('rejects unreviewed engine %s',v=>expect(()=>admitEngine(v)).toThrow());
+it.each(['10.11.10-MariaDB','11.4.12-MariaDB','11.5.1-MariaDB','11.8.8-MariaDB','11.8.10-MariaDB','11.8.90-MariaDB','11.9.0-MariaDB','12.0.1-MariaDB','5.7.40','8.0.16','unknown','postgresql'])('rejects unreviewed engine %s',v=>expect(()=>admitEngine(v)).toThrow());
 it.each(['11.4.13-MariaDB-ubu2404','5.5.5-11.4.13-MariaDB','11.4.14-MariaDB'])('admits reviewed MariaDB line %s',v=>expect(admitEngine(v)).toBe('mariadb'));
 it.each(['8.0.17','8.4.4','9.6.0'])('preserves MySQL %s',v=>expect(admitEngine(v)).toBe('mysql'));
 it('keeps all 12 canonical identities and only reviewed MariaDB translations',async()=>{
@@ -28,3 +28,5 @@ it('never treats blank compatibility selectors as optional',()=>{expect(()=>vali
 it('reports only safe engine metadata, never an arbitrary server banner',()=>{expect(engineSummary('11.4.13-MariaDB-private-server-banner')).toBe('MariaDB 11.4.13');expect(engineSummary('unknown-private-server-banner')).toBe('MySQL/unknown UNKNOWN');});
 
 it('rejects an unknown vendor even if its banner resembles MySQL',()=>{expect(()=>admitEngine('8.4.4','Unreviewed fork')).toThrow();expect(admitEngine('8.4.4','MySQL Community Server - GPL')).toBe('mysql');expect(admitEngine('8.0.46-0ubuntu0.24.04.4','(Ubuntu)')).toBe('mysql');});
+
+it.each(['11.8.9-MariaDB-log','11.8.9-MariaDB-ubu2404','5.5.5-11.8.9-MariaDB'])('admits exact Hostinger release %s',version=>{expect(admitEngine(version)).toBe('mariadb');expect(engineSummary(version)).toBe('MariaDB 11.8.9');});

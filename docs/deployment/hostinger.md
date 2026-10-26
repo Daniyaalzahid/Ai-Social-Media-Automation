@@ -181,10 +181,10 @@ Providers remain disabled, including LinkedIn and OpenRouter (omit its credentia
 
 ### Engine compatibility and canonical history
 
-Provisioning admits MySQL 8.0.17+/8.x and 9.x, or MariaDB >=11.4.13 and <11.5.0.
+Provisioning admits MySQL 8.0.17+/8.x and 9.x, or MariaDB >=11.4.13 and <11.5.0, plus exact MariaDB 11.8.9.
 Other engines/versions fail before migration/journal writes. Confirm the actual
 Hostinger version: an older MariaDB does NOT become supported by setting a flag.
-MariaDB CHECK enforcement must be enabled. The tested MariaDB engine is 11.4.13;
+MariaDB CHECK enforcement must be enabled. The tested MariaDB engines are 11.4.13 and 11.8.9;
 Docker was used only to obtain an isolated test engine, never as a hosting requirement.
 
 All twelve historical SQL files and manifest hashes remain unchanged. CANONICAL_SOURCE_HASH
@@ -351,3 +351,23 @@ CRON_SECRET currently has no operational consumer; omit it. All DEV_/TEST_ datab
 media variables, especially TEST_DATABASE_RESET_ALLOWED, must be absent in production.
 Never set NODE_TLS_REJECT_UNAUTHORIZED=0. No actual Hostinger/provider validation is
 claimed by local tests; perform separately authorized deployment-only checks and backups.
+
+
+### Hostinger MariaDB 11.8.9 reconciliation
+
+The supplied Hostinger production banner is 11.8.9-MariaDB-log. Independent isolated
+validation uses the official MariaDB 11.8.9 image, including a binary-log-enabled
+local fixture; no Hostinger connection or credentials
+are used. Admission adds ONLY exact 11.8.9 (including normal vendor/log suffixes), not
+all 11.8 patches or MariaDB 11.x. The existing 11.4.13–11.4.x range remains unchanged.
+11.8.8, 11.8.10 and 11.9 remain rejected pending their own review. This exact boundary
+matches the deployment evidence and tested release without assuming future compatibility.
+
+All twelve canonical migrations and their 148 translated statements use the existing
+reviewed rules unchanged. Integration starts with an explicitly guarded empty test
+schema and exercises provisioning, canonical journal hashes, idempotent seeds/rerun,
+32 permissions, no automatic users/provider authorizations, live identity, shared and
+exclusive locks, CHECK enforcement, regex/JSON semantics, generated unique keys, foreign
+keys, Unicode, millisecond timestamps, authorization queries and transaction rollback.
+MySQL validation remains separate and required. Neither the exact managed-loopback
+transport exception nor default DNS/verified-TLS behavior changes in this reconciliation.
