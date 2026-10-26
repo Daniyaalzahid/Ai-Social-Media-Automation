@@ -7,7 +7,7 @@ import { requireAuthenticatedUser,requirePermission,can,type AuthorizationContex
 import { SensitiveValue,SecurityOperationError } from '../security/sensitive.ts';
 import { cleanupExpiredRateLimits } from '../security/rate-limits.ts';
 import { MEDIA_LIMITS,uploadSchema,mediaViewSchema } from '../../features/media/model.ts';
-import { MediaError,type MediaStorage,LocalPrivateMediaStorage } from './storage.ts';
+import { MediaError,type MediaStorage } from './storage.ts';
 import { inspectMedia } from './parser.ts';
 export type MediaDatabase=Kysely<DatabaseSchema>;
 const eligible=(row:Selectable<MediaAssetsTable>)=>row.status==='receiving'||row.status==='temporary';
@@ -90,7 +90,7 @@ export function createMediaService(db:MediaDatabase,storage:MediaStorage){
    let deleted=0,failed=releaseFailures;
    for(const row of rows){try{if(await claim(row.id,'expired')&&await finishDeletion(row.id))deleted++;}catch{failed++;try{await audit(db,row.id,'cleanup_failed',null);}catch{/* CLI reports the failure even if logging is unavailable. */}}}
    // Every normal file write has a committed reservation first. Reconcile only old untracked keys, bounded per call.
-   if(storage instanceof LocalPrivateMediaStorage)for(const file of await storage.abandonedCandidates()){if(+file.mtime>+now-MEDIA_LIMITS.receivingMs)continue;try{await transaction(async(tx)=>{await guard(tx);const record=await tx.selectFrom('media_assets').select('id').where('storage_key','=',file.key).forShare().executeTakeFirst();if(!record)await storage.delete(file.key);});}catch{failed++;}}
+   if(storage.abandonedCandidates)for(const file of await storage.abandonedCandidates()){if(+file.mtime>+now-MEDIA_LIMITS.receivingMs)continue;try{await transaction(async(tx)=>{await guard(tx);const record=await tx.selectFrom('media_assets').select('id').where('storage_key','=',file.key).forShare().executeTakeFirst();if(!record)await storage.delete(file.key);});}catch{failed++;}}
    return{selected:rows.length,deleted,failed};
   },
  };

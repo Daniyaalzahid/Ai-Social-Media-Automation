@@ -170,3 +170,184 @@ separation is temporal and operational rather than enforced by separate identiti
 Maintenance isolation, actual grant reduction, closing old connections and restart are
 mandatory. Environment-variable presence alone never enables LinkedIn or another
 provider; all provider enablement/verification gates remain unchanged.
+
+
+## Final Hostinger V1 deployment contract
+
+This section defines the explicit managed-hosting exceptions; the default DNS/TLS,
+two-user and local-private-filesystem contracts remain available elsewhere. This is
+code readiness, not evidence of an actual Hostinger connection or deployment.
+Providers remain disabled, including LinkedIn and OpenRouter (omit its credentials).
+
+### Engine compatibility and canonical history
+
+Provisioning admits MySQL 8.0.17+/8.x and 9.x, or MariaDB >=11.4.13 and <11.5.0.
+Other engines/versions fail before migration/journal writes. Confirm the actual
+Hostinger version: an older MariaDB does NOT become supported by setting a flag.
+MariaDB CHECK enforcement must be enabled. The tested MariaDB engine is 11.4.13;
+Docker was used only to obtain an isolated test engine, never as a hosting requirement.
+
+All twelve historical SQL files and manifest hashes remain unchanged. CANONICAL_SOURCE_HASH
+continues to identify the original migration in both journals. EXECUTED_ENGINE_COMPATIBLE_SQL
+is a deterministic, reviewed execution mapping after source-integrity verification.
+The mapper admits only the twelve exact reviewed source hashes, never arbitrary SQL.
+MySQL executes the canonical statements. Future MariaDB migrations need explicit review.
+
+| Migration | MariaDB execution review |
+| --- | --- |
+| 0000 | Shared InnoDB tables, named CHECK/FK constraints, indexes, utf8mb4_bin, millisecond DATETIME defaults; no translation |
+| 0001 | Shared JSON_TYPE/KEYS/CONTAINS metadata constraints; no translation |
+| 0002 | Exact users_active_password DROP CHECK becomes DROP CONSTRAINT |
+| 0003 | Shared ALTER enum expansion; no translation |
+| 0004 | Shared columns, foreign keys and CHECK; no translation |
+| 0005 | Shared guard/seed/ALTER constraints; no translation |
+| 0006 | Shared Brand Brain schema, indexes, FK, JSON arrays and seed DML; no translation |
+| 0007 | Fixed case-sensitive ASCII REGEXP_LIKE predicates become BINARY REGEXP BINARY |
+| 0008 | JSON_SCHEMA_VALID retained; JSON_STORAGE_SIZE becomes OCTET_LENGTH on MariaDB text JSON |
+| 0009 | Same JSON storage mapping; generated active-review key retained |
+| 0010 | Same JSON storage mapping; schema validation, binary comparisons and constraints retained |
+| 0011 | Both reviewed regex and JSON storage mappings; composite FK and state constraints retained |
+
+MariaDB JSON is validated text, unlike MySQL binary JSON. Its size predicates bound
+actual UTF-8 stored text bytes (including whitespace); they do not pretend to compute
+MySQL binary sizes. Thus edge-case acceptance can differ; no size predicate is removed.
+JSON schema, uniqueness, MIME/state, ID grammar and authorization constraints remain.
+Runtime shared row locks compile to LOCK IN SHARE MODE, supported by both engines;
+exclusive locks remain FOR UPDATE. Transactions, UTC/strict session initialization,
+CURRENT_USER()/DATABASE(), information_schema journal queries, canonical seed upserts,
+and GET_LOCK/RELEASE_LOCK retain their existing purpose. DDL remains nontransactional;
+partial migration failure requires reviewed recovery, not automatic retry/reset.
+
+Isolated MariaDB validation is separately available via npm run test:mariadb with
+APP_ENV=test, NODE_ENV=test, TEST_DATABASE_RESET_ALLOWED=1 and a guarded local
+TEST_DATABASE_MIGRATION_URL for bsa_test_maria_clean. Use only the dedicated disposable
+schema/account with escaped schema-only grants. Existing MySQL tests remain required.
+
+### Exact managed loopback transport
+
+Set HOSTINGER_MANAGED_LOCAL_DB=true ONLY for the reviewed same-account endpoint
+127.0.0.1:3306, with both APP_ENV=production and NODE_ENV=production explicitly set.
+This is a local non-TLS transport exception authorized for this hosting deployment;
+it does NOT provide certificate or hostname authentication. It relies on Hostinger's
+managed local endpoint/isolation. It makes no claim that loopback proves the complete
+underlying network topology. Never use this mode for a remote/proxied plaintext target.
+
+The selector rejects other IPv4 addresses, IPv6, DNS hosts, other ports, missing or
+conflicting production selectors, dev/test database identities, URL query/fragment
+controls and alternate truthy values. Without exact true, production retains DNS-name
+verified TLS >=1.2. No rejectUnauthorized=false or global TLS disable is introduced.
+Local connections also admit the reviewed engine/version and CHECK enforcement.
+
+Keep DATABASE_URL and DATABASE_MIGRATION_URL separate configuration inputs. For this
+single-user Hostinger installation both identify the same reviewed account/password,
+host, effective port and schema, with HOSTINGER_SINGLE_DB_USER_PROVISIONING=true in
+the administrative environment. Exact database confirmation and live account/database
+checks remain. Remove the single-user provisioning flag and migration URL from normal
+web runtime after administration; KEEP HOSTINGER_MANAGED_LOCAL_DB=true because it is
+the runtime transport selection. DB_CA_CERT_PATH does not authenticate plaintext
+loopback and should be omitted in this local mode. It remains available for DNS/TLS.
+
+### Durable private media: S3-compatible objects
+
+Use MEDIA_STORAGE_BACKEND=s3 on this Hostinger plan. No durable media belongs inside
+the checkout, public/public_html/htdocs/www, or deployment release directories.
+The local adapter remains available for development/tests or deployments with a
+verified private persistent path. No commercial object-store vendor is hardcoded.
+
+The external bucket must be private, dedicated to this app, with public access blocked,
+versioning disabled for V1 deletion semantics, no unrelated writers/lifecycle expiry
+of live objects, HTTPS, and supported conditional PutObject If-None-Match:*, SHA-256
+checksums, GetObject/HEAD/ranges, DeleteObject and ListObjectsV2. Review actual behavior
+before production use. Give credentials only required object access under private-media/
+and prefix-restricted listing; no account administration or public ACL privileges.
+No permanent URLs or credentials enter MySQL; existing opaque keys stay authoritative.
+
+All reads remain application-proxied AFTER existing media/content authorization.
+The adapter preserves create-only writes, size/SHA admission, validated MIME, deletion
+states, expiry/protection checks and approved publishing captures. SDK retries/region
+redirects are disabled. Endpoints are server-owned HTTPS configuration, not browser
+inputs. Per-object transfers are bounded at 32 MiB, with bounded network deadlines.
+
+Validation and reads use disposable process-owned 0700 scratch directories and 0600
+files under the platform temporary directory. These are NOT durable storage. Confirm
+Hostinger allows private writable temporary storage, parser child processes, sharp/
+mp4box, and native Argon2. At most four object read scratch handles are admitted per
+process; normal close/stream completion removes them. Process-crash leftovers require
+platform temporary-file reclamation; never expose temp files through a webroot.
+The adapter does not require a persistent private upload path on Hostinger.
+
+Cleanup uses existing DB lifecycle/holds plus bounded object-prefix orphan discovery:
+at most five pages of 100 objects, with a 15-second listing budget. An incomplete or
+looping listing fails closed instead of claiming completeness. Exceeding that inventory
+requires reviewed maintenance/capacity adjustment. Configure failed multipart cleanup
+at the store if otherwise used; this adapter itself uses bounded single PUTs.
+
+### Final environment inventories
+
+Set APP_ENV=production AND NODE_ENV=production explicitly. NODE_ENV is a framework/
+process setting, not an inferred Hostinger default. The example now lists 41 names;
+remove unrelated/optional imported entries instead of filling every field.
+
+Normal provider-disabled Hostinger web runtime:
+
+- APP_URL=https://social.binbazz.com
+- APP_ENV=production; NODE_ENV=production
+- DATABASE_URL=<PRIVATE_PERCENT_ENCODED_MYSQL_URL> (mysql protocol, reviewed user/password,
+  exact host 127.0.0.1, port 3306, reviewed database path; no query or fragment)
+- HOSTINGER_MANAGED_LOCAL_DB=true
+- SESSION_SECRET, MFA_ENCRYPTION_KEY, SECURITY_EVENT_HMAC_KEY: independent canonical
+  standard Base64 encodings of 32 random bytes, supplied privately; never example values
+- MFA_ENCRYPTION_KEY_ID: reviewed 1–40 character ASCII letters/digits/underscore/hyphen ID
+- MEDIA_STORAGE_BACKEND=s3
+- MEDIA_S3_ENDPOINT: reviewed HTTPS root origin, without credentials/query/fragment
+- MEDIA_S3_REGION: actual store signing region (1–80 letters/digits/hyphens)
+- MEDIA_S3_BUCKET: actual private dedicated bucket
+- MEDIA_S3_ACCESS_KEY_ID and MEDIA_S3_SECRET_ACCESS_KEY: private least-privilege credentials
+- MEDIA_S3_FORCE_PATH_STYLE: omit for false/default, or exact true if required by the store
+
+Keep DB_POOL_MAX / DB_POOL_ACQUIRE_TIMEOUT_MS / DB_CONNECT_TIMEOUT_MS omitted initially
+(defaults 2 / 5000 / 5000; existing ranges unchanged). Omit DB_CA_CERT_PATH for local
+transport. Do not set MEDIA_STORAGE_ROOT alongside the object backend.
+
+Initial provisioning private environment (web access stopped):
+
+- APP_ENV=production; NODE_ENV=production; HOSTINGER_MANAGED_LOCAL_DB=true
+- DATABASE_URL and DATABASE_MIGRATION_URL: same reviewed local target and decoded credentials
+- HOSTINGER_SINGLE_DB_USER_PROVISIONING=true
+- Optional reviewed DB tuning only; no media/provider/authentication secrets required
+
+Run npm run db:provision:production -- --confirm-production-database=<EXACT_DATABASE_NAME>.
+It reports a sanitized engine version, rejects unsupported engines before schema writes,
+applies/verifies canonical journals and seeds exactly 32 permissions. No Owner, provider
+profile or default password is created. No startup migration or reset/down exists.
+
+Owner bootstrap: retain the same PRIVATE administrative environment after provisioning
+succeeds; run npm run owner:bootstrap in its secure interactive TTY. Protected prompts,
+one-time gate and verified complete journal/catalog remain. Never pass a password in
+an environment variable/argument. Finish normal Owner MFA after web runtime is ready.
+
+Future migration maintenance: stop public web access, back up, restore only required
+schema grants temporarily, supply the administrative environment above, run the reviewed
+provisioning command, verify journals/seeds, close admin connections and reduce privileges.
+Do not repeat consumed Owner bootstrap. Runtime requires only bounded/scoped SELECT,
+INSERT, UPDATE, DELETE; current provisioning additionally uses CREATE, ALTER, INDEX,
+REFERENCES. No automatic grant manipulation is implemented. Confirm hPanel can actually
+reduce privileges; the compatibility mode itself does not reduce grants.
+
+Then remove DATABASE_MIGRATION_URL and HOSTINGER_SINGLE_DB_USER_PROVISIONING from the
+web process, retain the local transport selector, and restart with fresh connections.
+
+Media maintenance: npm run media:cleanup -- --environment=production, using normal runtime
+DB/object-store configuration. Schedule a non-overlapping invocation every five minutes
+if supported by the hosting execution limits; require successful exit and monitor failures.
+This is media cleanup, not social publishing dispatch. No permanent worker is required.
+
+Optional providers: leave TOKEN_ENCRYPTION_KEY, OPENROUTER_API_KEY, OPENROUTER_MODEL,
+META_APP_ID/SECRET, TIKTOK_CLIENT_KEY/SECRET, GOOGLE_CLIENT_ID/SECRET and
+LINKEDIN_CLIENT_ID/SECRET unset. Credential presence never enables social providers;
+OpenRouter must remain unconfigured for this V1 deployment. Provider token operations
+will later need an independent 32-byte canonical Base64 TOKEN_ENCRYPTION_KEY.
+CRON_SECRET currently has no operational consumer; omit it. All DEV_/TEST_ database and
+media variables, especially TEST_DATABASE_RESET_ALLOWED, must be absent in production.
+Never set NODE_TLS_REJECT_UNAUTHORIZED=0. No actual Hostinger/provider validation is
+claimed by local tests; perform separately authorized deployment-only checks and backups.

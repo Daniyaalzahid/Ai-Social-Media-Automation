@@ -1,12 +1,14 @@
 import { productionProvisioningConfiguration, provisionDatabase } from '../src/server/db/provision.ts';
 import { createDatabase } from '../src/server/db/connection.ts';
+import { detectEngine } from '../src/server/db/engine.ts';
 
 let handle;
 try {
   if (process.argv.length !== 3) throw new Error();
   const configuration = productionProvisioningConfiguration(process.env, process.argv[2]);
   // Only the admitted DATABASE_MIGRATION_URL identity ever opens a connection.
-  handle = createDatabase(configuration);
+  handle = createDatabase(configuration, summary => console.log('Database engine: ' + summary));
+  await detectEngine(handle.db, configuration.hostingerLocal ? undefined : summary => console.log('Database engine: ' + summary));
   await provisionDatabase(handle.db, configuration);
   console.log('Production database provisioning completed. Owner bootstrap remains a separate action.');
 } catch {

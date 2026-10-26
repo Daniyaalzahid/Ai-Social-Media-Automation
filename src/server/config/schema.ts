@@ -26,6 +26,7 @@ const schema = z.object({
   DATABASE_URL: databaseUrl,
   DATABASE_MIGRATION_URL: databaseUrl,
   HOSTINGER_SINGLE_DB_USER_PROVISIONING: z.enum(['true', 'false']).optional(),
+  HOSTINGER_MANAGED_LOCAL_DB: z.enum(['true', 'false']).optional(),
   DEV_DATABASE_URL: databaseUrl,
   DEV_DATABASE_MIGRATION_URL: databaseUrl,
   TEST_DATABASE_URL: databaseUrl,
@@ -36,6 +37,13 @@ const schema = z.object({
   DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(100).max(10000).optional(),
   DB_CA_CERT_PATH: optionalText,
   MEDIA_STORAGE_ROOT: optionalText,
+  MEDIA_STORAGE_BACKEND: z.enum(['local','s3']).optional(),
+  MEDIA_S3_ENDPOINT: optionalText,
+  MEDIA_S3_REGION: optionalText,
+  MEDIA_S3_BUCKET: optionalText,
+  MEDIA_S3_ACCESS_KEY_ID: optionalText,
+  MEDIA_S3_SECRET_ACCESS_KEY: optionalText,
+  MEDIA_S3_FORCE_PATH_STYLE: z.enum(['true','false']).optional(),
   DEV_MEDIA_STORAGE_ROOT: optionalText,
   TEST_MEDIA_STORAGE_ROOT: optionalText,
   SESSION_SECRET: secret,
@@ -75,6 +83,8 @@ export function validateEnvironment(source: EnvironmentSource): ServerEnvironmen
   const mode = cleaned.APP_ENV ?? runtime;
   const fields: string[] = [];
   if (source.HOSTINGER_SINGLE_DB_USER_PROVISIONING !== undefined && !['true', 'false'].includes(source.HOSTINGER_SINGLE_DB_USER_PROVISIONING)) fields.push('HOSTINGER_SINGLE_DB_USER_PROVISIONING');
+  if (source.HOSTINGER_MANAGED_LOCAL_DB !== undefined && !['true', 'false'].includes(source.HOSTINGER_MANAGED_LOCAL_DB)) fields.push('HOSTINGER_MANAGED_LOCAL_DB');
+  if (source.HOSTINGER_MANAGED_LOCAL_DB === 'true' && (source.APP_ENV !== 'production' || source.NODE_ENV !== 'production')) fields.push('HOSTINGER_MANAGED_LOCAL_DB');
   if (!['development', 'test', 'production'].includes(runtime)) fields.push('NODE_ENV');
   if (cleaned.NODE_ENV && mode !== runtime) fields.push('APP_ENV', 'NODE_ENV');
   for (const key of Object.keys(cleaned)) {

@@ -19,6 +19,7 @@ export function storageRoot(source:Record<string,string|undefined>){
  return path;
 }
 export interface MediaStorage {
+ abandonedCandidates?():Promise<{key:string;mtime:Date}[]>;
  write(key:string,source:ReadableStream<Uint8Array>,maximum:number):Promise<{bytes:number;sha256:Buffer}>;
  open(key:string):Promise<FileHandle>;exists(key:string):Promise<boolean>;delete(key:string):Promise<void>;
 }

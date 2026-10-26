@@ -4,6 +4,7 @@ import { sql, type Kysely } from 'kysely';
 import { Migrator, type Migration } from 'kysely/migration';
 import { z } from 'zod';
 import type { DatabaseSchema } from './schema.ts';
+import { detectEngine, engineStatements } from './engine.ts';
 
 const folder = new URL('../../../migrations/', import.meta.url);
 const manifestSchema = z.array(z.object({ name: z.string().regex(/^\d{4}_[a-z0-9_]+\.sql$/), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict()).min(1);
@@ -16,13 +17,16 @@ export async function readMigrations() {
   return Promise.all(manifest.map(async (entry) => {
     const content = await readFile(new URL(entry.name, folder), 'utf8');
     if (createHash('sha256').update(content).digest('hex') !== entry.sha256) throw new Error('Migration checksum mismatch');
-    return { ...entry, statements: content.split('--> statement-breakpoint').map((value) => value.trim()).filter(Boolean) };
+    return { ...entry, source: content, statements: content.split('--> statement-breakpoint').map((value) => value.trim()).filter(Boolean) };
   }));
 }
 
 /** Explicit guarded CLI/test use only; never invoked on application startup. */
 export async function migrateDatabase(db: Kysely<DatabaseSchema>): Promise<void> {
   const entries = await readMigrations();
+  const { engine } = await detectEngine(db);
+  // Admit every canonical source/translation before the first journal/schema write.
+  const executable = new Map(entries.map(entry => [entry.name, engineStatements(engine, entry.name, entry.source)]));
   await sql`CREATE TABLE IF NOT EXISTS schema_migration_checksums (name varchar(150) PRIMARY KEY, sha256 char(64) NOT NULL, state enum('applying','applied') NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`.execute(db);
   const applied = await sql<{ name: string; sha256: string; state: string }>`SELECT name, sha256, state FROM schema_migration_checksums`.execute(db);
   for (const row of applied.rows) {
@@ -39,7 +43,7 @@ export async function migrateDatabase(db: Kysely<DatabaseSchema>): Promise<void>
   const migrations: Record<string, Migration> = Object.fromEntries(entries.map((entry) => [entry.name, {
     up: async (connection) => {
       await sql`INSERT INTO schema_migration_checksums (name, sha256, state) VALUES (${entry.name}, ${entry.sha256}, 'applying')`.execute(connection);
-      for (const statement of entry.statements) await sql.raw(statement).execute(connection);
+      for (const statement of executable.get(entry.name)!) await sql.raw(statement).execute(connection);
       await sql`UPDATE schema_migration_checksums SET state = 'applied' WHERE name = ${entry.name}`.execute(connection);
     },
     // MySQL DDL is not transactionally reversible. Recovery uses backup restoration

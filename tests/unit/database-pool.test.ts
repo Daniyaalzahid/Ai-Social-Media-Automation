@@ -35,3 +35,9 @@ describe('application database pool boundary', () => {
     expect(() => resolveDatabaseConfiguration({ APP_ENV: 'production', NODE_ENV: 'production', DATABASE_URL: url.href })).toThrow('hostname required');
   });
 });
+
+it('selects plaintext only for the admitted exact Hostinger loopback transport',async()=>{
+ const url=new URL('mysql://127.0.0.1:3306/reviewed_db');url.username='reviewed_user';url.password='synthetic-fixture';const source={APP_ENV:'production',NODE_ENV:'production',DATABASE_URL:url.href,HOSTINGER_MANAGED_LOCAL_DB:'true'};
+ const handle=createDatabase(resolveDatabaseConfiguration(source));expect(createPool).toHaveBeenCalledWith(expect.objectContaining({host:'127.0.0.1',port:3306}));expect(vi.mocked(createPool).mock.calls[0]![0]!).not.toHaveProperty('ssl');await handle.close();
+ const config=resolveDatabaseConfiguration(source);expect(()=>createDatabase({...config,host:'192.0.2.1'})).toThrow();expect(()=>createDatabase({...config,hostingerLocal:undefined} as unknown as typeof config)).toThrow();
+});

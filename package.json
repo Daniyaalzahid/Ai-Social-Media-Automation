@@ -24,10 +24,12 @@
     "db:seed": "node scripts/database.mjs seed",
     "db:provision:production": "node scripts/provision-production.mjs",
     "test:db": "node scripts/database.mjs test",
+    "test:mariadb": "vitest run --config vitest.mariadb.config.ts",
     "owner:bootstrap": "node scripts/owner-bootstrap.mjs",
     "media:cleanup": "node --experimental-transform-types scripts/media-cleanup.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1156.0",
     "@fontsource-variable/dm-sans": "5.3.0",
     "argon2": "0.45.1",
     "kysely": "0.29.6",

@@ -17,7 +17,8 @@ export function productionProvisioningConfiguration(source: EnvironmentSource, c
     // Bootstrap admission enforces separate users by default, or the explicit
     // reviewed Hostinger same-user/same-password administrative exception.
     const admin = resolveDatabaseConfiguration(source, 'bootstrap');
-    if (!runtime.tls || !admin.tls || runtime.host !== admin.host || runtime.port !== admin.port || runtime.database !== admin.database || confirmation !== '--confirm-production-database=' + admin.database) throw unavailable();
+    if ((!runtime.tls || !admin.tls) && !(runtime.hostingerLocal && admin.hostingerLocal)) throw unavailable();
+    if (runtime.host !== admin.host || runtime.port !== admin.port || runtime.database !== admin.database || confirmation !== '--confirm-production-database=' + admin.database) throw unavailable();
     return admin;
   } catch { throw unavailable(); }
 }

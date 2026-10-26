@@ -13,7 +13,7 @@ import { validatePassword } from './password-policy.ts';
 
 export async function verifyBootstrapDatabase(db: Kysely<DatabaseSchema>, configuration: DatabaseConfiguration): Promise<void> {
   try {
-  if ((configuration.mode !== 'production' && !configuration.user.endsWith('_migration')) || (configuration.mode === 'production' && !configuration.tls)) throw new SecurityOperationError();
+  if ((configuration.mode !== 'production' && !configuration.user.endsWith('_migration')) || (configuration.mode === 'production' && !configuration.tls && !(configuration.hostingerLocal && configuration.host === '127.0.0.1' && configuration.port === 3306))) throw new SecurityOperationError();
   const identity = (await sql<{ database_name: string; account_name: string }>`SELECT DATABASE() AS database_name, CURRENT_USER() AS account_name`.execute(db)).rows[0];
   if (!identity || identity.database_name !== configuration.database || identity.account_name.split('@')[0] !== configuration.user) throw new SecurityOperationError();
   if (configuration.mode === 'production') await assertMigrationsComplete(db);

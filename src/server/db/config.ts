@@ -6,6 +6,7 @@ export type DatabaseConfiguration = Readonly<{
   mode: 'development' | 'test' | 'production'; host: string; port: number; database: string;
   user: string; password: string; connectionLimit: number; acquireTimeout: number; connectTimeout: number;
   tls: boolean; caCertPath?: string;
+  hostingerLocal?: true;
 }>;
 
 function boundedNumber(source: EnvironmentSource, key: string, fallback: number, min: number, max: number): number {
@@ -41,6 +42,12 @@ export function resolveDatabaseConfiguration(source: EnvironmentSource, purpose:
   try { user = decodeURIComponent(url.username); password = decodeURIComponent(url.password); database = decodeURIComponent(url.pathname.slice(1)); }
   catch { throw new EnvironmentValidationError([key]); }
   const host = url.hostname.replace(/^\[|\]$/g, '');
+  const localFlag = source.HOSTINGER_MANAGED_LOCAL_DB;
+  if (localFlag !== undefined && localFlag !== 'true' && localFlag !== 'false') throw new EnvironmentValidationError(['HOSTINGER_MANAGED_LOCAL_DB']);
+  const hostingerLocal = localFlag === 'true';
+  if (hostingerLocal && (source.APP_ENV !== 'production' || source.NODE_ENV !== 'production' || host !== '127.0.0.1' || Number(url.port || 3306) !== 3306 || source.NODE_TLS_REJECT_UNAUTHORIZED === '0')) {
+    throw new EnvironmentValidationError(['Hostinger exact production loopback required']);
+  }
   if (url.protocol !== 'mysql:' || !host || !password || !/^[a-zA-Z0-9_]+$/.test(user) || !/^[a-zA-Z0-9_]+$/.test(database) || url.search || url.hash) {
     throw new EnvironmentValidationError([key]);
   }
@@ -60,7 +67,7 @@ export function resolveDatabaseConfiguration(source: EnvironmentSource, purpose:
     throw new EnvironmentValidationError([key]);
   }
   // mysql2's explicit certificate identity check requires a DNS hostname.
-  if (mode === 'production' && isIP(host)) throw new EnvironmentValidationError([key, 'verified database hostname required']);
+  if (mode === 'production' && isIP(host) && !hostingerLocal) throw new EnvironmentValidationError([key, 'verified database hostname required']);
   if (mode === 'production' && purpose === 'bootstrap') {
     if (source.APP_ENV !== 'production' || source.NODE_ENV !== 'production') throw new EnvironmentValidationError(['APP_ENV', 'NODE_ENV']);
     const flag = source.HOSTINGER_SINGLE_DB_USER_PROVISIONING;
@@ -82,6 +89,6 @@ export function resolveDatabaseConfiguration(source: EnvironmentSource, purpose:
     connectionLimit: boundedNumber(source, 'DB_POOL_MAX', 2, 1, 10),
     acquireTimeout: boundedNumber(source, 'DB_POOL_ACQUIRE_TIMEOUT_MS', 5000, 100, 10000),
     connectTimeout: boundedNumber(source, 'DB_CONNECT_TIMEOUT_MS', 5000, 100, 10000),
-    tls: mode === 'production', ...(source.DB_CA_CERT_PATH ? { caCertPath: source.DB_CA_CERT_PATH } : {}),
+    tls: mode === 'production' && !hostingerLocal, ...(hostingerLocal ? { hostingerLocal: true as const } : {}), ...(source.DB_CA_CERT_PATH ? { caCertPath: source.DB_CA_CERT_PATH } : {}),
   });
 }
