@@ -15,6 +15,7 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.typecheck.json",
     "test:browser": "playwright test",
+    "test:production-runtime": "node --test tests/production/runtime.test.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "secret-scan": "node scripts/secret-scan.mjs",

@@ -77,6 +77,16 @@ describe('environment validation', () => {
   it.each(['API_KEY', 'CLIENT_KEY', 'OPENROUTER_KEY', 'TOKEN_ENCRYPTION_KEY', 'SESSION_SECRET', 'ACCESS_TOKEN', 'DATABASE_URL', 'PASSWORD'])('rejects NEXT_PUBLIC_%s credentials even when blank', (suffix) => {
     expect(() => validateEnvironment({ [`NEXT_PUBLIC_${suffix}`]: '' })).toThrow('forbidden credential');
   });
+  it.each(['local', 's3'] as const)('accepts the exact production media selector %s', backend => {
+    expect(validateEnvironment({ ...production(), MEDIA_STORAGE_BACKEND: backend }).MEDIA_STORAGE_BACKEND).toBe(backend);
+  });
+  it.each(['S3_COMPATIBLE_PRIVATE_OBJECT_STORAGE', 'S3', 'LOCAL'])('rejects architecture labels and alternate media selectors without exposing values', backend => {
+    let caught: unknown;
+    try { validateEnvironment({ ...production(), MEDIA_STORAGE_BACKEND: backend }); } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(EnvironmentValidationError);
+    expect((caught as EnvironmentValidationError).fields).toEqual(['MEDIA_STORAGE_BACKEND']);
+    expect(String(caught)).not.toContain(backend);
+  });
   it('does not return unknown values from the process environment', () => {
     expect(validateEnvironment({ UNRELATED_PRIVATE_VALUE: 'fixture' })).not.toHaveProperty('UNRELATED_PRIVATE_VALUE');
   });

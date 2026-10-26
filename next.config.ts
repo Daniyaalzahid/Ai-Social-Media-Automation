@@ -2,6 +2,8 @@ import type { NextConfig } from 'next';
 import { PHASE_PRODUCTION_BUILD } from 'next/constants';
 
 const config: NextConfig = {
+  // Ship Next's generated server with the reviewed configuration serialized in it.
+  output: 'standalone',
   poweredByHeader: false,
   // OAuth callback query strings contain one-use credentials even in development.
   logging: { incomingRequests: { ignore: [/\/api\/oauth\//] } },

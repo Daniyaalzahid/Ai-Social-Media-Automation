@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import path from 'node:path';
 import ts from 'typescript';
 import { afterEach, describe, expect, it } from 'vitest';
-import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD } from 'next/constants';
+import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD, PHASE_PRODUCTION_SERVER } from 'next/constants';
 import nextConfig from '../../next.config';
 
 const primaryText = readFileSync('tsconfig.json', 'utf8');
@@ -71,6 +71,11 @@ describe('standalone non-development typecheck contract', () => {
     expect(selected.fileNames.includes(path.join(root, '.next/types/routes.d.ts'))).toBe(true);
     expect(selected.fileNames.some(file => file.includes('/.next/dev/types/'))).toBe(false);
     expect(config(root, 'tsconfig.json').fileNames.includes(path.join(root, '.next/dev/types/routes.d.ts'))).toBe(true);
+  });
+  it.each([PHASE_PRODUCTION_BUILD, PHASE_PRODUCTION_SERVER, PHASE_DEVELOPMENT_SERVER])('retains standalone auth-interrupt configuration for %s', phase => {
+    const config = nextConfig(phase);
+    expect(config.output).toBe('standalone');
+    expect(config.experimental?.authInterrupts).toBe(true);
   });
   it('isolates production roots without suppressing source or generated type errors', () => {
     const { root, put } = fixture(true);

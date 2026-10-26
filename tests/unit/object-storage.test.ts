@@ -52,3 +52,11 @@ it('bounds pagination and rejects incomplete or looping orphan inventories',asyn
 it('streams ranges without exposing a remote URL and cleans private scratch',async()=>{const store=new PrivateObjectMediaStorage(env());await store.write(key,mediaStream(Buffer.from('abcdef')),100);const h=await store.open(key);const chunks:Buffer[]=[];for await(const b of h.createReadStream({start:1,end:3,autoClose:true}))chunks.push(Buffer.from(b));expect(Buffer.concat(chunks).toString()).toBe('bcd');});
 
 it('rejects endpoint credentials',()=>{const endpoint=new URL('https://objects.example.com');endpoint.username='synthetic';endpoint.password='fixture';expect(()=>objectStorageConfiguration({...env(),MEDIA_S3_ENDPOINT:endpoint.href})).toThrow();});
+
+it('selects the private S3 adapter for the exact Hostinger B2 selector without network activity',()=>{
+ const source={...env(),MEDIA_STORAGE_BACKEND:'s3',MEDIA_S3_ENDPOINT:'https://s3.us-east-005.backblazeb2.com',MEDIA_S3_REGION:'us-east-005'};
+ expect(configuredMediaStorage(source)).toBeInstanceOf(PrivateObjectMediaStorage);
+ expect(S3Client).toHaveBeenCalledWith(expect.objectContaining({endpoint:source.MEDIA_S3_ENDPOINT,region:'us-east-005',maxAttempts:1,followRegionRedirects:false}));
+ expect(fake.send).not.toHaveBeenCalled();
+ expect(()=>configuredMediaStorage({...source,MEDIA_STORAGE_BACKEND:'S3_COMPATIBLE_PRIVATE_OBJECT_STORAGE'})).toThrow('MEDIA_STORAGE_BACKEND');
+});

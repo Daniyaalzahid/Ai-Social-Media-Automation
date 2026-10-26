@@ -39,6 +39,8 @@ jobs:
           NODE_ENV: production
           APP_ENV: production
           NEXT_TELEMETRY_DISABLED: '1'
+      - name: Verify production standalone authorization runtime
+        run: npm run test:production-runtime
       - name: Install test browser on the managed CI runner
         run: npx --no-install playwright install chromium
       - name: Verify browser authentication against disposable isolated MySQL

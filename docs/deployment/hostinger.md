@@ -371,3 +371,53 @@ exclusive locks, CHECK enforcement, regex/JSON semantics, generated unique keys,
 keys, Unicode, millisecond timestamps, authorization queries and transaction rollback.
 MySQL validation remains separate and required. Neither the exact managed-loopback
 transport exception nor default DNS/verified-TLS behavior changes in this reconciliation.
+
+
+## Production runtime hotfix: standalone authorization and media selector
+
+The reviewed Next.js 16.4.1 configuration explicitly generates `output: 'standalone'`
+and retains `experimental.authInterrupts: true` for build and server phases.
+Authorization still uses the documented `forbidden()` interrupt and the existing
+403 boundary. No RBAC, session, MFA, CSRF or request-admission check is removed.
+Use the generated standalone artifact and its serialized configuration together;
+do not reconstruct Next configuration or reuse an older `.next` tree. Hostinger's
+exact managed startup invocation is not exposed in the supplied logs. A fresh
+artifact must retain `config.experimental.authInterrupts === true` in
+`.next/required-server-files.json` and the generated standalone server configuration.
+Do not set private `__NEXT_*` environment variables as a workaround.
+
+Next's documented standalone entrypoint is `node .next/standalone/server.js` (or
+`node server.js` from the deployed standalone root). It also needs the matching
+`.next/static` and `public` directories; the minimal server does not copy those
+assets automatically. Hostinger's managed publishing must preserve these matching
+artifacts. This is a deployment verification requirement, not authorization to
+change Hostinger or its managed startup command.
+
+Run `npm run test:production-runtime` after `npm run build` in validation. It builds a disposable Next
+application with an exact copy of this repository's Next configuration and starts
+Next's generated standalone server under `NODE_ENV=production`. Real framework
+403/401/404 responses are exercised without database or provider credentials.
+It also starts the actual built application standalone entrypoint with no database
+or provider credentials, verifies its serialized flag, serves login, and confirms
+anonymous workspace requests redirect to login before any database use.
+The ordinary browser suite uses `next dev`; a passing build alone does not execute
+runtime denial paths. Neither used to verify the packaged standalone startup.
+
+`MEDIA_STORAGE_BACKEND` accepts exactly the case-sensitive selectors `local` and
+`s3`. The S3-compatible **architecture description**
+`S3_COMPATIBLE_PRIVATE_OBJECT_STORAGE` is not an environment selector. Existing
+runtime documentation's `MEDIA_STORAGE_BACKEND=s3` is authoritative; correct any
+provisioning notes or hosting entries that used the architecture description.
+For the reviewed private Backblaze B2 deployment, the non-secret settings are:
+
+```text
+MEDIA_STORAGE_BACKEND=s3
+MEDIA_S3_ENDPOINT=https://s3.us-east-005.backblazeb2.com
+MEDIA_S3_REGION=us-east-005
+```
+
+Keep the existing private bucket and server-side credentials unchanged. No public
+object URLs, anonymous object access, signed browser URLs, authorization bypass,
+new storage alias, or provider enablement is introduced. Media is still delivered
+through the application's authorized proxy. No production DB provisioning or
+Owner bootstrap is part of this hotfix.
