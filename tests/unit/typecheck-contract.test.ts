@@ -7,6 +7,7 @@ import nextConfig from '../../next.config';
 
 const primaryText = readFileSync('tsconfig.json', 'utf8');
 const contractText = readFileSync('tsconfig.typecheck.json', 'utf8');
+const buildText = readFileSync('tsconfig.build.json', 'utf8');
 const roots: string[] = [];
 function fixture(dev = false) {
   mkdirSync('.cache', { recursive: true });
@@ -18,6 +19,7 @@ function fixture(dev = false) {
   };
   put('tsconfig.json', primaryText);
   put('tsconfig.typecheck.json', contractText);
+  put('tsconfig.build.json', buildText);
   put('src/app/source.ts', 'export const value: string = "synthetic";');
   put('src/server/provider-security/source.ts', 'export const value: number = 1;');
   put('tests/source.ts', 'export const value: boolean = true;');
@@ -59,7 +61,7 @@ describe('standalone non-development typecheck contract', () => {
   it('selects the dedicated config only for production builds with dev types present', () => {
     const build = nextConfig(PHASE_PRODUCTION_BUILD);
     const development = nextConfig(PHASE_DEVELOPMENT_SERVER);
-    expect(path.resolve(build.typescript!.tsconfigPath!)).toBe(path.resolve('tsconfig.typecheck.json'));
+    expect(path.resolve(build.typescript!.tsconfigPath!)).toBe(path.resolve('tsconfig.build.json'));
     expect(build.typescript?.ignoreBuildErrors).not.toBe(true);
     expect(build.experimental?.useTypeScriptCli).toBeUndefined();
     expect(development.typescript?.tsconfigPath ?? 'tsconfig.json').toBe('tsconfig.json');
@@ -70,24 +72,41 @@ describe('standalone non-development typecheck contract', () => {
     expect(selected.fileNames.some(file => file.includes('/.next/dev/types/'))).toBe(false);
     expect(config(root, 'tsconfig.json').fileNames.includes(path.join(root, '.next/dev/types/routes.d.ts'))).toBe(true);
   });
+  it('isolates production roots without suppressing source or generated type errors', () => {
+    const { root, put } = fixture(true);
+    put('tests/source.ts', 'export const value: number = "synthetic type error";');
+    const production = config(root, 'tsconfig.build.json');
+    expect(production.fileNames.some(file => file.includes('/tests/'))).toBe(false);
+    expect(config(root, 'tsconfig.json').fileNames.some(file => file.includes('/tests/'))).toBe(false);
+    expect(semanticErrors(production)).toEqual([]);
+    expect(semanticErrors(config(root)).includes(2322)).toBe(true);
+    for (const file of ['src/app/source.ts', 'src/server/provider-security/source.ts', '.next/types/validator.ts']) {
+      put(file, 'export const value: number = "synthetic type error";');
+      expect(semanticErrors(config(root, 'tsconfig.build.json')).includes(2322)).toBe(true);
+      put(file, 'export const value: number = 1;');
+    }
+    expect(production.options).toEqual({ ...config(root).options, configFilePath: production.options.configFilePath });
+  });
   it('preserves the public command and production typegen order', () => {
     const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts;
     expect(scripts.typecheck).toBe('next typegen && tsc --noEmit -p tsconfig.typecheck.json');
-    expect(JSON.parse(contractText)).toEqual({ extends: './tsconfig.json', exclude: ['node_modules', '.next/dev/types/**'] });
+    expect(JSON.parse(contractText)).toEqual({ extends: './tsconfig.json', exclude: ['node_modules', '.next/dev/types/**'], include: [...JSON.parse(primaryText).include, 'tests/**/*.ts', 'tests/**/*.tsx'] });
   });
-  it('inherits include and compiler options, overriding only discovery excludes', () => {
+  it('retains test coverage and compiler options while excluding development types', () => {
     const { root } = fixture(true);
     const base = config(root, 'tsconfig.json'), selected = config(root);
-    expect(selected.raw.include).toEqual(base.raw.include);
+    expect(selected.raw.include).toEqual([...base.raw.include, 'tests/**/*.ts', 'tests/**/*.tsx']);
     expect(selected.options).toEqual({ ...base.options, configFilePath: selected.options.configFilePath });
-    expect(selected.fileNames).toEqual(base.fileNames.filter(file => !file.includes('/.next/dev/types/')));
+    expect(selected.fileNames).toEqual(expect.arrayContaining(base.fileNames.filter(file => !file.includes('/.next/dev/types/'))));
+    expect(selected.fileNames.some(file => file.includes('/tests/'))).toBe(true);
   });
   it('preserves the actual repository effective file set and compiler options', () => {
     const root = path.resolve('.'), base = config(root, 'tsconfig.json'), selected = config(root);
-    expect(selected.raw.include).toEqual(base.raw.include);
+    expect(selected.raw.include).toEqual([...base.raw.include, 'tests/**/*.ts', 'tests/**/*.tsx']);
     expect(selected.options).toEqual({ ...base.options, configFilePath: selected.options.configFilePath });
-    expect(selected.fileNames).toEqual(base.fileNames.filter(file => !file.includes('/.next/dev/types/')));
-    for (const directory of ['src/app', 'src/server', 'src/server/provider-security', 'tests']) {
+    expect(selected.fileNames).toEqual(expect.arrayContaining(base.fileNames.filter(file => !file.includes('/.next/dev/types/'))));
+    expect(selected.fileNames.some(file => file.includes('/tests/'))).toBe(true);
+    for (const directory of ['src/app', 'src/server', 'src/server/provider-security']) {
       const intended = base.fileNames.filter(file => file.startsWith(path.join(root, directory) + path.sep));
       expect(intended.length > 0).toBe(true);
       expect(intended.every(file => selected.fileNames.includes(file))).toBe(true);

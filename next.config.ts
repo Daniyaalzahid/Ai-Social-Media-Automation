@@ -23,6 +23,6 @@ const config: NextConfig = {
 };
 export default function nextConfig(phase: string): NextConfig {
   return phase === PHASE_PRODUCTION_BUILD
-    ? { ...config, typescript: { tsconfigPath: './tsconfig.typecheck.json' } }
+    ? { ...config, typescript: { tsconfigPath: './tsconfig.build.json' } }
     : config;
 }
