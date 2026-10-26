@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { Badge, StatusBadge } from '../../src/components/ui/badge';
 import { Button, IconButton } from '../../src/components/ui/button';
 import { Card } from '../../src/components/ui/card';
-import { Checkbox, Input, Select, Textarea } from '../../src/components/ui/fields';
+import { Checkbox, Input, Select, Textarea, FormSection } from '../../src/components/ui/fields';
+import { PlatformChoice } from '../../src/components/ui/platform-choice';
 import { Dialog } from '../../src/components/ui/dialog';
 import { Tabs } from '../../src/components/ui/tabs';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/ui/states';
@@ -38,6 +39,30 @@ describe('accessible UI building blocks', () => {
     expect(screen.getByRole('combobox', { name: 'Language' })).toHaveValue('Urdu');
     await user.click(screen.getByRole('checkbox', { name: 'Preview preference' }));
     expect(screen.getByRole('checkbox', { name: 'Preview preference' })).toBeChecked();
+  });
+  it('keeps platform chips keyboard-operable native checkboxes with controlled selection', async () => {
+    const user = userEvent.setup();
+    function Platforms() {
+      const [selected, setSelected] = useState(false);
+      return <FormSection title="Platforms" step="02"><PlatformChoice platform="LINKEDIN" checked={selected} onChange={event => setSelected(event.target.checked)} /><PlatformChoice platform="FACEBOOK" disabled /></FormSection>;
+    }
+    render(<Platforms />);
+    expect(screen.getByRole('group', { name: 'Platforms' })).toBeInTheDocument();
+    const checkbox = screen.getByRole('checkbox', { name: 'LINKEDIN' });
+    await user.tab();
+    expect(checkbox).toHaveFocus();
+    await user.keyboard(' ');
+    expect(checkbox).toBeChecked();
+    await user.click(screen.getByText('LinkedIn'));
+    expect(checkbox).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'FACEBOOK' })).toBeDisabled();
+  });
+  it('preserves disabled fieldsets and named controls inside form sections', () => {
+    render(<FormSection title="Draft details" disabled><Input id="draft-title" label="Internal title" required /><PlatformChoice platform="TIKTOK" /></FormSection>);
+    expect(screen.getByRole('group', { name: 'Draft details' })).toBeDisabled();
+    expect(screen.getByLabelText('Internal title')).toBeDisabled();
+    expect(screen.getByRole('checkbox', { name: 'TIKTOK' })).toBeDisabled();
+    expect(screen.getByLabelText('Internal title')).toHaveAttribute('required');
   });
   it('renders a single page heading and meaningful state announcements', () => {
     render(<><PageHeader title="Media" description="Your visual library" /><EmptyState title="Nothing here yet" description="Add an idea later." /><LoadingState label="Loading preview" /><ErrorState title="Offline" description="Try again later." /></>);

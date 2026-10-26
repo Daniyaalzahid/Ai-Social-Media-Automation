@@ -18,7 +18,7 @@ describe('workspace shell and presentation pages', () => {
     expect(navigation.map((item) => item.label)).toEqual(['Overview', 'Create Post', 'Calendar', 'Content', 'Media', 'Approvals', 'Analytics', 'Connections', 'Brand Brain', 'Team', 'Activity', 'Settings']);
     expect(within(nav).getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main-content');
-    expect(screen.getByRole('searchbox', { name: 'Search workspace preview' })).toBeDisabled();
+    expect(screen.getByRole('searchbox', { name: 'Search workspace' })).toBeDisabled();
   });
   it('collapses the desktop sidebar without losing link accessible names', async () => {
     const user = userEvent.setup();

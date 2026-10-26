@@ -21,7 +21,12 @@ test('upload UI keyboard/remove and responsive widths retain the existing design
  page.on('response',observe);
  try{
   await sign(context,'OWNER');passed.push(assertion);assertion='navigate-media';await page.goto('/media');passed.push(assertion);
-  const input=page.getByLabel('Choose a temporary image or video');assertion='focus-file-input';await input.focus();passed.push(assertion);
+  const input=page.getByLabel('Choose a temporary image or video');
+  // Attached streamed content may still be hidden. Native focus intentionally
+  // ignores hidden controls; establish visibility without retrying the action.
+  assertion='assert-input-visible';await expect(input).toBeVisible();passed.push(assertion);
+  assertion='assert-input-enabled';await expect(input).toBeEnabled();passed.push(assertion);
+  assertion='focus-file-input';await input.focus();passed.push(assertion);
   assertion='assert-input-focused';await expect(input).toBeFocused();passed.push(assertion);
   assertion='set-input-file';await input.setInputFiles({name:'keyboard.png',mimeType:'image/png',buffer:await imageFixture()});passed.push(assertion);
   assertion='assert-upload-ready-status';await expect(page.getByRole('status')).toContainText('Upload ready');passed.push(assertion);

@@ -20,3 +20,9 @@ export function Select({ id, label, hint, error, className, ...props }: Componen
 export function Checkbox({ id, label, className, ...props }: Omit<ComponentProps<'input'>, 'type'> & { id: string; label: string }) {
   return <label className={classes('checkbox', className)} htmlFor={id}><input {...props} id={id} type="checkbox" /><span>{label}</span></label>;
 }
+
+// Semantic group shared by the manual composer and AI generator. Disabled
+// fieldsets retain their native form behavior; presentation never gates access.
+export function FormSection({ title, step, description, children, className, ...props }: ComponentProps<'fieldset'> & { title: string; step?: string; description?: string }) {
+  return <fieldset {...props} className={classes('form-section', className)}><legend>{step && <span className="section-step" aria-hidden="true">{step}</span>}{title}</legend>{description && <p className="section-description">{description}</p>}<div className="form-section-body">{children}</div></fieldset>;
+}

@@ -17,7 +17,7 @@ export function Connections({initial}:{initial:ConnectionsView}){
    if(result.redirect){window.location.assign(result.redirect);return;}const r=await fetch('/api/connections',{cache:'no-store'}),data=await r.json();if(!r.ok||!data.ok)throw new Error();setView(data.view);setPending(null);setMessage('Connection updated.');
   }catch{setMessage('Unable to complete this connection request. Restart and try again.');}finally{setBusy(false);}
  }
- return <div style={{overflowWrap:'anywhere'}}><p>External authorization only. Connecting a channel does not publish content or verify publishing readiness.</p><p role="status" aria-live="polite">{message}</p>
+ return <div className="connections-workspace" style={{overflowWrap:'anywhere'}}><p>External authorization only. Connecting a channel does not publish content or verify publishing readiness.</p><p role="status" aria-live="polite">{message}</p>
  {PROVIDERS.map(provider=><Card key={provider}><h2>{provider==='META'?'Facebook / Instagram':provider==='YOUTUBE'?'YouTube':provider==='TIKTOK'?'TikTok':'LinkedIn'}</h2>
  {view.setup.includes(provider)&&<p><Badge>Provider setup required</Badge> Current official protocol and app configuration must be verified before connection.</p>}
  {view.destinations.filter(d=>d.provider===provider).map(d=><p key={d.id}>{d.displayName} {d.handle??''} · {d.status.toLowerCase().replaceAll('_',' ')} · Publishing unverified</p>)}

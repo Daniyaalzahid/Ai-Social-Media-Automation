@@ -5,7 +5,7 @@ import '../styles/globals.css';
 
 export const metadata: Metadata = {
   title: { default: 'Bismillah Social AI', template: '%s · Bismillah Social AI' },
-  description: 'A thoughtful social workspace for Bismillah Electronics. Phase 1 UI preview.',
+  description: 'A thoughtful social workspace for Bismillah Electronics.',
   robots: { index: false, follow: false },
 };
 export default function RootLayout({ children }: { children: ReactNode }) {
