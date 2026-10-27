@@ -375,16 +375,20 @@ transport exception nor default DNS/verified-TLS behavior changes in this reconc
 
 ## Production runtime hotfix: standalone authorization and media selector
 
-The reviewed Next.js 16.4.1 configuration explicitly generates `output: 'standalone'`
-and retains `experimental.authInterrupts: true` for build and server phases.
-Authorization still uses the documented `forbidden()` interrupt and the existing
-403 boundary. No RBAC, session, MFA, CSRF or request-admission check is removed.
-Use the generated standalone artifact and its serialized configuration together;
-do not reconstruct Next configuration or reuse an older `.next` tree. Hostinger's
-exact managed startup invocation is not exposed in the supplied logs. A fresh
-artifact must retain `config.experimental.authInterrupts === true` in
-`.next/required-server-files.json` and the generated standalone server configuration.
-Do not set private `__NEXT_*` environment variables as a workaround.
+The Next.js configuration generates `output: 'standalone'`, but application
+access denial no longer depends on experimental `authInterrupts`. That option is
+removed. The existing server-side proxy now checks every workspace document and
+Flight request before rendering: anonymous/invalid sessions redirect to login;
+authenticated permission denials receive a non-cacheable HTTP 403. Document
+denials rewrite to one stable Pages SSR endpoint to reuse the existing StatusPage
+UI and styles while explicitly setting response status 403; Flight denials return
+403 directly. Workspace pages remain in the App Router. Page guards
+still revalidate independently. If authorization changes after proxy admission,
+the page guard stops rendering using stable `redirect('/access-denied')`; the
+fallback SSR endpoint returns HTTP 403. This late fallback involves a redirect,
+rather than an experimental Server Component interrupt. API 401/403 responses,
+mutation authorization, sessions, MFA and CSRF remain unchanged. Stable
+`notFound()` stays in place for missing resources and does not require this flag.
 
 Next's documented standalone entrypoint is `node .next/standalone/server.js` (or
 `node server.js` from the deployed standalone root). It also needs the matching
@@ -393,15 +397,17 @@ assets automatically. Hostinger's managed publishing must preserve these matchin
 artifacts. This is a deployment verification requirement, not authorization to
 change Hostinger or its managed startup command.
 
-Run `npm run test:production-runtime` after `npm run build` in validation. It builds a disposable Next
-application with an exact copy of this repository's Next configuration and starts
-Next's generated standalone server under `NODE_ENV=production`. Real framework
-403/401/404 responses are exercised without database or provider credentials.
-It also starts the actual built application standalone entrypoint with no database
-or provider credentials, verifies its serialized flag, serves login, and confirms
-anonymous workspace requests redirect to login before any database use.
-The ordinary browser suite uses `next dev`; a passing build alone does not execute
-runtime denial paths. Neither used to verify the packaged standalone startup.
+Run `npm run test:production-runtime` after `npm run build` in validation. It builds
+a disposable Next application with the actual proxy/page guards and pure permission
+checks, synthetic session/database boundaries, and the repository's exact config.
+With experimental auth interrupts disabled, it proves anonymous/invalid-session
+redirects, exact permission-denied HTTP 403, authorized HTTP 200, late denial to
+the stable 403 endpoint, and stable 404 handling. The full DB/browser suites retain
+real session/MFA/RBAC coverage. It also starts the actual application standalone
+artifact, serves login and denies anonymous workspace requests before DB access.
+A source guardrail rejects experimental authorization imports/calls in application
+source. The ordinary browser suite uses `next dev`; the production gate exercises
+the generated production server separately. No production credentials are used.
 
 `MEDIA_STORAGE_BACKEND` accepts exactly the case-sensitive selectors `local` and
 `s3`. The S3-compatible **architecture description**

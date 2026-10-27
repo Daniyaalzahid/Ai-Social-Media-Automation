@@ -9,7 +9,6 @@ const config: NextConfig = {
   logging: { incomingRequests: { ignore: [/\/api\/oauth\//] } },
   // Preserve Flight headers for the early RSC denial check; route/page guards remain authoritative.
   skipProxyUrlNormalize: true,
-  experimental: { authInterrupts: true },
   // Development overlay overlaps the approved sidebar footer controls.
   devIndicators: false,
   productionBrowserSourceMaps: false,

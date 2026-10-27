@@ -7,30 +7,34 @@ import { ROUTE_PERMISSIONS } from './server/authorization/routes';
 import { SESSION_COOKIE, browserConfiguration } from './server/auth/browser-security';
 import { SensitiveValue } from './server/security/sensitive';
 
-/** Early RSC denial prevents Flight streaming from fixing the HTTP status at 200.
+/** Early denial on every workspace request preserves HTTP 403 before streaming.
  * Page/API guards still revalidate; this never replaces mutation authorization. */
 export async function proxy(request: NextRequest) {
   const headers = new Headers(request.headers);
   const path = request.nextUrl.pathname.replace(/\/$/, '') || '/';
   const route=path.startsWith('/content/')?'/content':path;
   headers.set('x-bsa-route', route); // Always overwrite client input.
-  if (request.headers.has('rsc') || request.headers.has('next-router-prefetch') || path.startsWith('/content/')) {
-    const privateHeaders = { 'Cache-Control': 'no-store, private', 'X-Robots-Tag': 'noindex, nofollow' };
-    const login = () => {
-      // Next's Flight adapter requires an absolute redirect. Use configured origin, never forwarded hosts.
-      try { return new NextResponse(null, { status: 307, headers: { ...privateHeaders, Location: new URL('/login', browserConfiguration(process.env).origin).href } }); }
-      catch { return new NextResponse('Unable to access this workspace area.', { status: 503, headers: privateHeaders }); }
-    };
-    const raw = request.cookies.get(SESSION_COOKIE)?.value;
-    if (!raw || !/^[A-Za-z0-9_-]{43}$/.test(raw)) return login();
-    try {
-      const context = await authorizationContext(getDatabase(), new SensitiveValue(raw));
-      requireAnyPermission(context, ROUTE_PERMISSIONS[route] ?? []);
-      if(path.startsWith('/content/')){const parts=path.split('/');if(parts.length!==3)return new NextResponse(null,{status:404,headers:privateHeaders});await createContentService(getDatabase()).get(new SensitiveValue(raw),parts[2]);}
-    } catch (error) {
-      if (error instanceof AuthorizationError && error.status === 401) return login();
-      return new NextResponse('Unable to access this workspace area.', { status: error instanceof AuthorizationError ? 403 : error instanceof ContentError ? error.status : 503, headers: privateHeaders });
+  const privateHeaders = { 'Cache-Control': 'no-store, private', 'X-Robots-Tag': 'noindex, nofollow' };
+  const login = () => {
+    // Next's Flight adapter requires an absolute redirect. Use configured origin, never forwarded hosts.
+    try { return new NextResponse(null, { status: 307, headers: { ...privateHeaders, Location: new URL('/login', browserConfiguration(process.env).origin).href } }); }
+    catch { return new NextResponse('Unable to access this workspace area.', { status: 503, headers: privateHeaders }); }
+  };
+  const raw = request.cookies.get(SESSION_COOKIE)?.value;
+  if (!raw || !/^[A-Za-z0-9_-]{43}$/.test(raw)) return login();
+  try {
+    const context = await authorizationContext(getDatabase(), new SensitiveValue(raw));
+    requireAnyPermission(context, ROUTE_PERMISSIONS[route] ?? []);
+    if(path.startsWith('/content/')){const parts=path.split('/');if(parts.length!==3)return new NextResponse(null,{status:404,headers:privateHeaders});await createContentService(getDatabase()).get(new SensitiveValue(raw),parts[2]);}
+  } catch (error) {
+    if (error instanceof AuthorizationError && error.status === 401) return login();
+    if (error instanceof AuthorizationError && !request.headers.has('rsc') && !request.headers.has('next-router-prefetch')) {
+      // Render the existing denial UI through a stable SSR endpoint whose handler
+      // sets HTTP 403. Never render the protected workspace or infer permission.
+      const denial = request.nextUrl.clone(); denial.pathname = '/access-denied'; denial.search = '';
+      return NextResponse.rewrite(denial, { headers: privateHeaders });
     }
+    return new NextResponse('Unable to access this workspace area.', { status: error instanceof AuthorizationError ? 403 : error instanceof ContentError ? error.status : 503, headers: privateHeaders });
   }
   return NextResponse.next({ request: { headers } });
 }

@@ -72,10 +72,10 @@ describe('standalone non-development typecheck contract', () => {
     expect(selected.fileNames.some(file => file.includes('/.next/dev/types/'))).toBe(false);
     expect(config(root, 'tsconfig.json').fileNames.includes(path.join(root, '.next/dev/types/routes.d.ts'))).toBe(true);
   });
-  it.each([PHASE_PRODUCTION_BUILD, PHASE_PRODUCTION_SERVER, PHASE_DEVELOPMENT_SERVER])('retains standalone auth-interrupt configuration for %s', phase => {
+  it.each([PHASE_PRODUCTION_BUILD, PHASE_PRODUCTION_SERVER, PHASE_DEVELOPMENT_SERVER])('retains standalone output without experimental auth interrupts for %s', phase => {
     const config = nextConfig(phase);
     expect(config.output).toBe('standalone');
-    expect(config.experimental?.authInterrupts).toBe(true);
+    expect(config.experimental?.authInterrupts).not.toBe(true);
   });
   it('isolates production roots without suppressing source or generated type errors', () => {
     const { root, put } = fixture(true);

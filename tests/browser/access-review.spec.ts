@@ -55,7 +55,7 @@ for (const variant of ['evil-origin', 'multiple-origin', 'no-origin', 'cross-sit
 test('all direct and RSC-prefetch workspace requests deny missing/random credentials', async ({ request }) => {
   for (const route of routes) for (const cookie of ['', `__Host-bsa-session=${randomBytes(32).toString('base64url')}`]) {
     const response = await request.get(route, { maxRedirects: 0, headers: { cookie } });
-    expect(response.status()).toBe(307); expect(response.headers().location).toBe('/login');
+    expect(response.status()).toBe(307); expect(response.headers().location).toBe(origin + '/login');
     const prefetch = await request.get(route, { maxRedirects: 0, headers: { cookie, RSC: '1', 'Next-Router-Prefetch': '1' } });
     expect([200, 307]).toContain(prefetch.status());
     expect((await prefetch.text()).includes('Scheduled today')).toBe(false);

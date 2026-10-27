@@ -12,7 +12,7 @@ import { Icon } from '../ui/icon';
 import { navigation, type NavigationItem } from './navigation';
 import { classes } from '../../lib/classes';
 
-function Navigation({ pathname, items, collapsed = false, onNavigate }: { items: readonly NavigationItem[]; pathname: string; collapsed?: boolean; onNavigate?: () => void }) {
+function Navigation({ pathname, items, collapsed = false, onNavigate }: { items: readonly NavigationItem[]; pathname: string | null; collapsed?: boolean; onNavigate?: () => void }) {
   return <nav aria-label="Main navigation" className="main-nav">{items.map((item) => <Link key={item.href} href={item.href} className={classes('nav-link', pathname === item.href && 'nav-link--active', item.href === '/connections' && 'nav-link--group')} aria-current={pathname === item.href ? 'page' : undefined} aria-label={collapsed ? item.label : undefined} title={collapsed ? item.label : undefined} {...(onNavigate ? { onClick: onNavigate } : {})}><Icon name={item.icon} />{!collapsed && <span>{item.label}</span>}{!collapsed && pathname === item.href && <span className="nav-dot" aria-hidden="true" />}</Link>)}</nav>;
 }
 
