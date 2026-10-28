@@ -15,7 +15,7 @@ const env=()=>({APP_ENV:'production',NODE_ENV:'production',MEDIA_STORAGE_BACKEND
 beforeAll(()=>{fake.objects.clear();fake.calls=[];fake.send.mockImplementation(async(command:{input:Record<string,unknown>;constructor:{name:string}})=>{
  const input=command.input,k=String(input.Key);fake.calls.push({name:command.constructor.name,input});
  switch(command.constructor.name){
- case 'PutObjectCommand':if(fake.objects.has(k))throw new Error('Synthetic collision');fake.objects.set(k,Buffer.from(input.Body as Buffer));return {};
+ case 'PutObjectCommand':if(input.IfNoneMatch==='*'&&fake.objects.has(k))throw new Error('Synthetic collision');fake.objects.set(k,Buffer.from(input.Body as Buffer));return {};
  case 'GetObjectCommand':{const bytes=fake.objects.get(k);if(!bytes)throw new Error('Synthetic missing');return {ContentLength:bytes.length,Body:{transformToWebStream:()=>mediaStream(bytes)}};}
  case 'HeadObjectCommand':if(!fake.objects.has(k))throw Object.assign(new Error('Synthetic missing'),{name:'NotFound'});return {};
  case 'DeleteObjectCommand':fake.objects.delete(k);return {};
@@ -42,4 +42,27 @@ it.each(['jpeg','png','webp','mp4'] as const)('validates real %s bytes through t
  expect(row.sha256).toEqual(await import('node:crypto').then(m=>m.createHash('sha256').update(bytes).digest()));
  const binary=await service.binary(actor.raw,view.id);try{expect(await binary.handle.readFile()).toEqual(bytes);}finally{await binary.handle.close();}
  await service.remove(actor.raw,view.id);expect(await store.exists(row.storage_key)).toBe(false);
+});
+
+it('reserves fresh 256-bit keys before each write and never reuses the key for the same display name',async()=>{
+ const actor=await contentActor(db),seen:string[]=[];
+ const guarded=createMediaService(db,{
+  open:store.open.bind(store),exists:store.exists.bind(store),delete:store.delete.bind(store),
+  async write(key,body,maximum){
+   expect(key).toMatch(/^[0-9a-f]{64}$/);expect(seen).not.toContain(key);
+   const reservation=await db.selectFrom('media_assets').selectAll().where('storage_key','=',key).executeTakeFirstOrThrow();
+   expect(reservation.created_by).toBe(actor.id);expect(reservation.status).toBe('receiving');seen.push(key);
+   return store.write(key,body,maximum);
+  },
+ });
+ const first=await imageFixture('png',2,2),second=await imageFixture('png',3,2);
+ const one=await guarded.upload(actor.raw,{name:'same-name.png',mime:'image/png'},mediaStream(first));
+ const two=await guarded.upload(actor.raw,{name:'same-name.png',mime:'image/png'},mediaStream(second));
+ expect(one.id).not.toBe(two.id);expect(seen).toHaveLength(2);expect(new Set(seen).size).toBe(2);
+ for(const [index,id,bytes] of [[0,one.id,first],[1,two.id,second]] as const){
+  const row=await db.selectFrom('media_assets').selectAll().where('id','=',id).executeTakeFirstOrThrow();
+  expect(row.storage_key).toBe(seen[index]);expect(row.sha256).toEqual(await import('node:crypto').then(m=>m.createHash('sha256').update(bytes).digest()));
+  const binary=await guarded.binary(actor.raw,id);try{expect(await binary.handle.readFile()).toEqual(bytes);}finally{await binary.handle.close();}
+  await guarded.remove(actor.raw,id);expect(await store.exists(row.storage_key)).toBe(false);
+ }
 });

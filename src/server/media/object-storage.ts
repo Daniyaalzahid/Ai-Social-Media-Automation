@@ -18,7 +18,9 @@ export function objectStorageConfiguration(source: Readonly<Record<string,string
     return {endpoint:endpoint.origin,bucket,region,credentials:{accessKeyId,secretAccessKey},forcePathStyle:style==='true'};
   } catch(error) { logObjectStorageError('Configuration',error);throw unavailable(); }
 }
-/** Private, create-only objects. Configuration is server-owned, never request data.
+/** Private objects under fresh, cryptographically random service-allocated keys.
+ * Create-only lifecycle is enforced by DB reservations, not conditional S3 writes.
+ * Configuration is server-owned, never request data.
  * Scratch files are private and disposable; durable media lives only in the bucket.
  */
 export class PrivateObjectMediaStorage implements MediaStorage {
@@ -28,7 +30,7 @@ export class PrivateObjectMediaStorage implements MediaStorage {
   constructor(source:Readonly<Record<string,string|undefined>>) {
     const config=objectStorageConfiguration(source);this.bucket=config.bucket;
     this.diagnosticCredentials=[config.credentials.accessKeyId,config.credentials.secretAccessKey];
-    try {this.client=new S3Client({...config,maxAttempts:1,followRegionRedirects:false,requestHandler:{connectionTimeout:5000,requestTimeout:60000,socketTimeout:15000}});}
+    try {this.client=new S3Client({...config,requestChecksumCalculation:'WHEN_REQUIRED',maxAttempts:1,followRegionRedirects:false,requestHandler:{connectionTimeout:5000,requestTimeout:60000,socketTimeout:15000}});}
     catch(error){logObjectStorageError('Initialize',error,this.diagnosticCredentials);throw unavailable();}
   }
   private key(key:string) {if(!/^[0-9a-f]{64}$/.test(key))throw unavailable();return 'private-media/'+key+'.bin';}
@@ -39,7 +41,10 @@ export class PrivateObjectMediaStorage implements MediaStorage {
     try {
       while(true){const next=await reader.read();if(next.done)break;bytes+=next.value.byteLength;if(bytes>maximum)throw new MediaError(413,'Media exceeds the file limit.');const chunk=Buffer.from(next.value);hash.update(chunk);chunks.push(chunk);}
       if(timedOut)throw unavailable();if(!bytes)throw new MediaError(400,'Empty media is not supported.');const sha256=hash.digest();
-      await this.client.send(new PutObjectCommand({Bucket:this.bucket,Key:name,Body:Buffer.concat(chunks),ContentLength:bytes,ContentType:'application/octet-stream',ChecksumSHA256:sha256.toString('base64'),IfNoneMatch:'*'}),{abortSignal:signal});
+      // B2-compatible plain PutObject: keep the local SHA-256 result for the DB,
+      // but send no optional AWS checksum or conditional-write extensions.
+      // The service allocates a new random key and commits its reservation first.
+      await this.client.send(new PutObjectCommand({Bucket:this.bucket,Key:name,Body:Buffer.concat(chunks),ContentLength:bytes,ContentType:'application/octet-stream'}),{abortSignal:signal});
       return {bytes,sha256};
     } catch(error){if(!(error instanceof MediaError) || error.status===503)logObjectStorageError('PutObject',error,this.diagnosticCredentials);if(error instanceof MediaError)throw error;throw unavailable();}
     finally {clearTimeout(timer);void reader.cancel().catch(()=>undefined);reader.releaseLock();}

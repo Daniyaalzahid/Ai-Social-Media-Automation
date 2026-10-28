@@ -19,8 +19,8 @@ vi.mock('@aws-sdk/client-s3',async(importOriginal)=>{
  }};
 });
 const source={MEDIA_S3_ENDPOINT:'https://s3.us-east-005.backblazeb2.com',MEDIA_S3_REGION:'us-east-005',MEDIA_S3_BUCKET:'private-wire-fixture',MEDIA_S3_ACCESS_KEY_ID:'synthetic-access',MEDIA_S3_SECRET_ACCESS_KEY:'synthetic-wire-fixture-not-a-real-credential'};
-beforeEach(()=>{wire.requests=[];wire.status=200;});afterEach(()=>vi.restoreAllMocks());
-it.each([false,true])('serializes the private create-only, length-bounded SHA-256 upload (path style %s)',async(pathStyle)=>{
+beforeEach(()=>{wire.requests=[];wire.status=200;vi.stubEnv('AWS_REQUEST_CHECKSUM_CALCULATION','WHEN_SUPPORTED');});afterEach(()=>{vi.restoreAllMocks();vi.unstubAllEnvs();});
+it.each([false,true])('serializes B2-compatible private uploads without optional AWS extensions while retaining local SHA-256 (path style %s)',async(pathStyle)=>{
  const bytes=Buffer.from('Synthetic object bytes'),store=new PrivateObjectMediaStorage({...source,MEDIA_S3_FORCE_PATH_STYLE:String(pathStyle)});
  const result=await store.write('a'.repeat(64),mediaStream(bytes),100);
  expect(result.sha256).toEqual(createHash('sha256').update(bytes).digest());expect(wire.requests).toHaveLength(1);
@@ -29,8 +29,9 @@ it.each([false,true])('serializes the private create-only, length-bounded SHA-25
  expect(request.hostname).toBe(pathStyle?'s3.us-east-005.backblazeb2.com':'private-wire-fixture.s3.us-east-005.backblazeb2.com');
  expect(request.path).toBe((pathStyle?'/private-wire-fixture':'')+'/private-media/'+'a'.repeat(64)+'.bin');
  expect(request.headers['content-length']).toBe(String(bytes.length));expect(request.headers['content-type']).toBe('application/octet-stream');
- expect(request.headers['if-none-match']).toBe('*');expect(request.headers['x-amz-checksum-sha256']).toBe(result.sha256.toString('base64'));
- expect(request.headers['x-amz-checksum-crc32']).toBeUndefined();expect(request.headers['x-amz-checksum-crc32c']).toBeUndefined();
+ expect(Object.keys(request.headers).filter(name=>name.startsWith('x-amz-checksum-')||name==='x-amz-sdk-checksum-algorithm'||name==='x-amz-trailer'||name==='if-none-match'||name==='if-match')).toEqual([]);
+ // SigV4 payload authentication is distinct from optional AWS checksum headers.
+ expect(request.headers['x-amz-content-sha256']).toBe(result.sha256.toString('hex'));
  expect(request.headers['x-amz-acl']).toBeUndefined();expect(request.headers['content-encoding']).not.toBe('aws-chunked');
  expect(request.headers.authorization?.includes('/us-east-005/s3/aws4_request')).toBe(true);
  expect(Buffer.from(request.body as Uint8Array)).toEqual(bytes);

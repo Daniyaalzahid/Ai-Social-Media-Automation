@@ -256,14 +256,15 @@ verified private persistent path. No commercial object-store vendor is hardcoded
 
 The external bucket must be private, dedicated to this app, with public access blocked,
 versioning disabled for V1 deletion semantics, no unrelated writers/lifecycle expiry
-of live objects, HTTPS, and supported conditional PutObject If-None-Match:*, SHA-256
-checksums, GetObject/HEAD/ranges, DeleteObject and ListObjectsV2. Review actual behavior
+of live objects, HTTPS, and supported ordinary PutObject, GetObject/HEAD/ranges,
+DeleteObject and ListObjectsV2. Review actual behavior
 before production use. Give credentials only required object access under private-media/
 and prefix-restricted listing; no account administration or public ACL privileges.
 No permanent URLs or credentials enter MySQL; existing opaque keys stay authoritative.
 
 All reads remain application-proxied AFTER existing media/content authorization.
-The adapter preserves create-only writes, size/SHA admission, validated MIME, deletion
+The service preserves a create-only lifecycle through fresh random keys and DB
+reservations. The adapter preserves size/local-SHA admission, validated MIME, deletion
 states, expiry/protection checks and approved publishing captures. SDK retries/region
 redirects are disabled. Endpoints are server-owned HTTPS configuration, not browser
 inputs. Per-object transfers are bounded at 32 MiB, with bounded network deadlines.
@@ -439,11 +440,31 @@ browser still receives the generic storage error. Share only this diagnostic lin
 
 The pinned SDK request is regression-tested without network traffic for the
 configured HTTPS endpoint/region, both bucket addressing modes, explicit byte
-length, SHA-256 checksum and create-only `If-None-Match: *`; no ACL is sent. These
-protections remain in place. A local serialization test is not proof that a real
+length and local SHA-256. It asserts that no conditional-write or optional AWS
+checksum headers are sent, and no ACL is sent. A local serialization test is not proof that a real
 B2 request succeeded. Use a single small JPG after deployment to obtain the actual
 provider diagnostic before changing credentials or request options.
 
 Empty browser MIME hints use only supported filename extensions (legacy JPEG
 hints normalize to `image/jpeg`). The server's exact four MIME values, filename
 checks and mandatory binary parsing remain authoritative and unchanged.
+
+### B2 PutObject compatibility
+
+Repeated production `PutObject` responses returned HTTP 501 `NotImplemented`.
+Those responses establish an unsupported request but do not identify an individual
+header. The B2-compatible request omits `IfNoneMatch` and `ChecksumSHA256` and sets
+SDK `requestChecksumCalculation: 'WHEN_REQUIRED'` so automatic optional CRC32
+headers are not substituted. SigV4 signing, HTTPS, ContentLength, local SHA-256,
+size bounds, private objects and safe diagnostics remain intact. No new setting
+or credential change is required.
+
+Create-only application behavior relies on a fresh cryptographically random
+32-byte/64-hex key for each new asset, a committed unique database reservation
+before writing, and the existing DB-controlled lifecycle. There is no provider-side
+atomic conditional-create guarantee for arbitrary reused keys; callers must never
+reuse a key for another upload. A same-name upload gets a different asset/key.
+No speculative HEAD-before-PUT race check or fallback retry is introduced. Local
+hashes continue to be stored in MySQL and used by existing integrity consumers.
+Validate one real upload, preview and deletion after deployment; local tests do
+not claim that a production B2 request succeeded.

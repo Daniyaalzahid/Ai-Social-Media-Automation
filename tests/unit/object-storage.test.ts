@@ -17,7 +17,7 @@ const key='a'.repeat(64);
 beforeEach(()=>{fake.objects.clear();fake.calls=[];fake.send.mockImplementation(async(command:{input:Record<string,unknown>;constructor:{name:string}})=>{
  const input=command.input,k=String(input.Key);fake.calls.push({name:command.constructor.name,input});
  switch(command.constructor.name){
- case 'PutObjectCommand':if(fake.objects.has(k))throw new Error('Synthetic collision');fake.objects.set(k,Buffer.from(input.Body as Buffer));return {};
+ case 'PutObjectCommand':if(input.IfNoneMatch==='*'&&fake.objects.has(k))throw new Error('Synthetic collision');fake.objects.set(k,Buffer.from(input.Body as Buffer));return {};
  case 'GetObjectCommand':{const bytes=fake.objects.get(k);if(!bytes)throw new Error('Synthetic missing');return {ContentLength:bytes.length,Body:{transformToWebStream:()=>mediaStream(bytes)}};}
  case 'HeadObjectCommand':if(!fake.objects.has(k))throw Object.assign(new Error('Synthetic missing'),{name:'NotFound'});return {};
  case 'DeleteObjectCommand':fake.objects.delete(k);return {};
@@ -26,14 +26,14 @@ beforeEach(()=>{fake.objects.clear();fake.calls=[];fake.send.mockImplementation(
  });});
 it('roundtrips private media, MIME-validates scratch FD, checks SHA and deletes idempotently',async()=>{
  const store=new PrivateObjectMediaStorage(env()),bytes=await imageFixture();const written=await store.write(key,mediaStream(bytes),8388608);expect(written.sha256).toEqual(createHash('sha256').update(bytes).digest());expect(written.bytes).toBe(bytes.length);
- const put=fake.calls[0]!;expect(put.input).toMatchObject({Key:'private-media/'+key+'.bin',IfNoneMatch:'*',ContentType:'application/octet-stream'});expect(put.input.ACL).toBeUndefined();
+ const put=fake.calls[0]!;expect(put.input).toMatchObject({Key:'private-media/'+key+'.bin',ContentType:'application/octet-stream'});expect(put.input.ACL).toBeUndefined();expect(put.input.IfNoneMatch).toBeUndefined();expect(put.input.ChecksumSHA256).toBeUndefined();expect(put.input.ChecksumAlgorithm).toBeUndefined();
  expect(await store.exists(key)).toBe(true);const handle=await store.open(key);expect(await handle.readFile()).toEqual(bytes);await handle.close();
  const parsed=await store.open(key);expect(await inspectMedia(parsed,'image/png')).toMatchObject({width:2,height:2});await parsed.close();
  expect(await store.abandonedCandidates()).toEqual([{key,mtime:new Date(0)}]);await store.delete(key);await store.delete(key);expect(await store.exists(key)).toBe(false);
- expect(S3Client).toHaveBeenCalledWith(expect.objectContaining({maxAttempts:1,followRegionRedirects:false,endpoint:'https://objects.example.com'}));
+ expect(S3Client).toHaveBeenCalledWith(expect.objectContaining({requestChecksumCalculation:'WHEN_REQUIRED',maxAttempts:1,followRegionRedirects:false,endpoint:'https://objects.example.com'}));
 });
 it('keeps scratch files private and removes them after close',async()=>{const store=new PrivateObjectMediaStorage(env());await store.write(key,mediaStream(Buffer.from('safe fixture')),100);const h=await store.open(key);expect((await h.stat()).mode&0o077).toBe(0);const path=await import('node:fs/promises').then(m=>m.readlink('/proc/self/fd/'+h.fd));await h.close();await expect(access(path)).rejects.toThrow();});
-it('never overwrites existing keys, accepts arbitrary keys, oversized or empty uploads',async()=>{const store=new PrivateObjectMediaStorage(env());await store.write(key,mediaStream(Buffer.from('fixture')),100);await expect(store.write(key,mediaStream(Buffer.from('replacement')),100)).rejects.toThrow();await expect(store.open('../outside')).rejects.toThrow();await expect(store.write('b'.repeat(64),mediaStream(Buffer.alloc(101)),100)).rejects.toMatchObject({status:413});await expect(store.write('b'.repeat(64),mediaStream(Buffer.alloc(0)),100)).rejects.toMatchObject({status:400});});
+it('rejects invalid keys, oversized and empty uploads before transport',async()=>{const store=new PrivateObjectMediaStorage(env());await expect(store.open('../outside')).rejects.toThrow();await expect(store.write('b'.repeat(64),mediaStream(Buffer.alloc(101)),100)).rejects.toMatchObject({status:413});await expect(store.write('b'.repeat(64),mediaStream(Buffer.alloc(0)),100)).rejects.toMatchObject({status:400});expect(fake.send).not.toHaveBeenCalled();});
 it.each(['http://objects.example.com','https://127.0.0.1','https://[::1]','https://localhost','https://objects.example.com/?query=1','https://objects.example.com/path'])('rejects unsafe endpoint %s',endpoint=>expect(()=>objectStorageConfiguration({...env(),MEDIA_S3_ENDPOINT:endpoint})).toThrow());
 it.each(['1','TRUE','',' true'])('rejects alternate path-style flag %j',flag=>expect(()=>objectStorageConfiguration({...env(),MEDIA_S3_FORCE_PATH_STYLE:flag})).toThrow());
 it('rejects dev/test roots and modes in object runtime factory',()=>{for(const patch of [{DEV_MEDIA_STORAGE_ROOT:'/tmp/private'},{TEST_MEDIA_STORAGE_ROOT:'/tmp/private'},{MEDIA_STORAGE_ROOT:'/tmp/private'},{APP_ENV:'test',NODE_ENV:'test'}])expect(()=>configuredMediaStorage({...env(),...patch})).toThrow();});
