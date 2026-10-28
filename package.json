@@ -11,11 +11,13 @@
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
+    "postbuild": "node scripts/package-media-cleanup.mjs",
     "start": "next start --hostname 0.0.0.0",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.typecheck.json",
     "test:browser": "playwright test",
     "test:production-runtime": "node --test tests/production/runtime.test.mjs",
+    "test:production-cleanup": "node --experimental-transform-types --test tests/production/cleanup.test.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "secret-scan": "node scripts/secret-scan.mjs",

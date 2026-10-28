@@ -338,10 +338,58 @@ reduce privileges; the compatibility mode itself does not reduce grants.
 Then remove DATABASE_MIGRATION_URL and HOSTINGER_SINGLE_DB_USER_PROVISIONING from the
 web process, retain the local transport selector, and restart with fresh connections.
 
-Media maintenance: npm run media:cleanup -- --environment=production, using normal runtime
-DB/object-store configuration. Schedule a non-overlapping invocation every five minutes
-if supported by the hosting execution limits; require successful exit and monitor failures.
-This is media cleanup, not social publishing dispatch. No permanent worker is required.
+Media maintenance runs directly from the deployed artifact (not last-source):
+
+```sh
+cd /home/u379324434/domains/social.binbazz.com/hbuilds/current/nodejs && node scripts/media-cleanup.mjs --environment=production
+```
+
+Use Node 24 on the SSH/cron PATH and the same approved production runtime
+DB/private-storage environment as the web process, including APP_ENV=production
+and NODE_ENV=production. SSH/cron must be supplied those existing values securely;
+do not assume that a managed web process automatically exports them to a shell.
+No new variables, migration credentials, source checkout dependencies or package
+installation are required. Missing or mismatched configuration fails closed.
+Never place secret values in the cron command, logs, source or build output.
+
+Successful output is JSON such as `{"selected":0,"deleted":0,"failed":0}` and exit
+status 0; counts may differ when expired media exists. Any failed cleanup produces
+nonzero exit status. Overlap produces `{"skipped":true,"reason":"cleanup_already_running"}`
+and exit 0 without starting cleanup. A schema-scoped MySQL GET_LOCK(...,0) on the
+same live connection covers the whole invocation and is released afterward; a
+second process skips immediately. This reuses database advisory locking and the
+existing transaction/row-lock/idempotent cleanup implementation. No LOCK TABLES,
+new tables, migration privileges, filesystem lock or permanent worker is needed.
+It remains safe with DB_POOL_MAX=1 and across release-directory switches.
+
+Only after the manual command succeeds, the non-overlapping five-minute crontab
+entry is (do not create it as part of source deployment):
+
+```cron
+*/5 * * * * cd /home/u379324434/domains/social.binbazz.com/hbuilds/current/nodejs && node scripts/media-cleanup.mjs --environment=production
+```
+
+Monitor exit status and the bounded JSON output. This is media cleanup, not social
+publishing dispatch. Do not use last-source/node_modules or npm install from cron.
+
+`npm run build` invokes a postbuild packager for this CLI. It uses the already
+pinned TypeScript compiler and Next.js NFT tracer to emit JavaScript and copy only
+the CLI's traced runtime dependency graph into `.next/standalone`, including kysely,
+mysql2 and their transitive dependencies. The deployed CLI needs neither a
+TypeScript loader nor build tools. Application cleanup logic is reused unchanged.
+`scripts/media-cleanup.nft.json` records
+packaged file hashes. No .env file or build-time environment values are copied.
+The only tolerated trace warning is mysql2's absent, optional debug highlighter
+cardinal; every other missing dependency or parse warning fails the build.
+
+Postbuild copies the actual emitted CLI graph outside the checkout and runs it
+with plain node and an empty production configuration. Import errors fail the
+build; safe configuration rejection is required. After build, run the additional
+isolated-MySQL regression using the established private test environment:
+`npm run test:production-cleanup`. CI supplies that environment explicitly. It
+verifies emitted hashes, missing-dependency detection, actual expired-file deletion,
+quota/tombstone state, idempotent rerun and concurrent-job exclusion using only
+packaged files outside the checkout. It never uses a production database or B2.
 
 Optional providers: leave TOKEN_ENCRYPTION_KEY, OPENROUTER_API_KEY, OPENROUTER_MODEL,
 META_APP_ID/SECRET, TIKTOK_CLIENT_KEY/SECRET, GOOGLE_CLIENT_ID/SECRET and
