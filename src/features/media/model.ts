@@ -5,5 +5,14 @@ export const uploadSchema=z.object({name:z.string().min(1).max(160).refine((v)=>
  const allowed:Record<typeof MIME[number],RegExp>={'image/jpeg':/^[^.]+\.jpe?g$/iu,'image/png':/^[^.]+\.png$/iu,'image/webp':/^[^.]+\.webp$/iu,'video/mp4':/^[^.]+\.mp4$/iu};
  if(!allowed[v.mime].test(v.name))c.addIssue({code:'custom',message:'Filename extension must match the supported media type.',path:['name']});
 });
+/** File.type is a browser hint, not a security boundary. Empty hints use only
+ * the four existing filename extensions; the server still verifies MIME/bytes. */
+export function browserUploadMime(name:string,type:string){
+ const extension=/\.([^.]+)$/.exec(name)?.[1]?.toLowerCase();
+ const fallback:Record<string,string>={jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',mp4:'video/mp4'};
+ const mime=type===''?(fallback[extension??'']??''):type==='image/jpg'||type==='image/pjpeg'?'image/jpeg':type;
+ const parsed=uploadSchema.safeParse({name,mime});
+ return parsed.success?parsed.data.mime:null;
+}
 export const mediaViewSchema=z.object({id:z.uuid(),name:z.string().max(160),kind:z.enum(['image','video']),mime:z.enum(MIME),bytes:z.number().int().nonnegative(),width:z.number().int().positive().nullable(),height:z.number().int().positive().nullable(),duration:z.number().nonnegative().nullable(),status:z.enum(['receiving','temporary','attached','retained','deletion_pending','deleted']),expiresAt:z.string(),createdAt:z.string(),canRemove:z.boolean()}).strict();
 export type MediaView=z.infer<typeof mediaViewSchema>;

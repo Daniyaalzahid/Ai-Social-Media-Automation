@@ -60,3 +60,15 @@ it('selects the private S3 adapter for the exact Hostinger B2 selector without n
  expect(fake.send).not.toHaveBeenCalled();
  expect(()=>configuredMediaStorage({...source,MEDIA_STORAGE_BACKEND:'S3_COMPATIBLE_PRIVATE_OBJECT_STORAGE'})).toThrow('MEDIA_STORAGE_BACKEND');
 });
+
+it.each(['write','open','exists','delete','abandonedCandidates'] as const)('logs safe metadata for %s failures while keeping the client error generic',async(operation)=>{
+ const log=vi.spyOn(console,'error').mockImplementation(()=>undefined),store=new PrivateObjectMediaStorage(env());
+ fake.send.mockRejectedValueOnce(Object.assign(new Error('DO_NOT_LOG upstream headers or credentials'),{name:'AccessDenied',$metadata:{httpStatusCode:403,requestId:'0123456789abcdef01234567'},$fault:'client'}));
+ try{
+  const result=operation==='write'?store.write(key,mediaStream(Buffer.from('fixture')),100):operation==='abandonedCandidates'?store.abandonedCandidates():store[operation](key);
+  await expect(result).rejects.toMatchObject({status:503,message:'Private object storage unavailable.'});
+  expect(log).toHaveBeenCalledOnce();expect(log.mock.calls[0]![0]).toContain('MEDIA_STORAGE_ERROR');expect(log.mock.calls[0]![0]).toContain('name=AccessDenied code=Unavailable status=403');
+  for(const secret of [env().MEDIA_S3_ACCESS_KEY_ID,env().MEDIA_S3_SECRET_ACCESS_KEY,'DO_NOT_LOG'])expect(log.mock.calls.flat().join()).not.toContain(secret);
+ }finally{log.mockRestore();}
+});
+it('does not log expected missing-object responses',async()=>{const log=vi.spyOn(console,'error').mockImplementation(()=>undefined);try{expect(await new PrivateObjectMediaStorage(env()).exists(key)).toBe(false);expect(log).not.toHaveBeenCalled();}finally{log.mockRestore();}});

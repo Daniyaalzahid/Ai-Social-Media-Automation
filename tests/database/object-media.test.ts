@@ -4,7 +4,7 @@ import { scratchDatabase,resetScratch } from './phase2b-helpers';
 import { createMediaService } from '../../src/server/media/service';
 import { PrivateObjectMediaStorage } from '../../src/server/media/object-storage';
 import { contentActor } from '../helpers/content-fixtures';
-import { imageFixture,mediaStream } from '../helpers/media-fixtures';
+import { imageFixture,videoFixture,mediaStream } from '../helpers/media-fixtures';
 const fake=vi.hoisted(()=>({send:vi.fn(),objects:new Map<string,Buffer>(),calls:[] as {name:string;input:Record<string,unknown>}[]}));
 vi.mock('@aws-sdk/client-s3',()=>{
  class Command{constructor(public input:Record<string,unknown>){}}
@@ -33,3 +33,13 @@ it('preserves authorized upload/read/delete and rejects another creator before o
 });
 it('rejects false MIME and reconciles failed object uploads without a public binary',async()=>{const actor=await contentActor(db);await expect(service.upload(actor.raw,{name:'fixture.png',mime:'image/png'},mediaStream(Buffer.from('<html>invalid</html>')))).rejects.toThrow();expect((await db.selectFrom('media_assets').select('status').where('created_by','=',actor.id).executeTakeFirstOrThrow()).status).toBe('deleted');});
 it('cleans expired objects and preserves tracked active media',async()=>{const actor=await contentActor(db);const expired=await service.upload(actor.raw,{name:'fixture.png',mime:'image/png'},mediaStream(await imageFixture()));const active=await service.upload(actor.raw,{name:'active.png',mime:'image/png'},mediaStream(await imageFixture()));await sql`UPDATE media_assets SET created_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 2 DAY),expires_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 1 DAY) WHERE id=${expired.id}`.execute(db);expect((await service.cleanup()).failed).toBe(0);expect((await db.selectFrom('media_assets').select('status').where('id','=',expired.id).executeTakeFirstOrThrow()).status).toBe('deleted');const handle=(await service.binary(actor.raw,active.id)).handle;await handle.close();});
+
+it.each(['jpeg','png','webp','mp4'] as const)('validates real %s bytes through the private object upload/read/delete lifecycle',async(format)=>{
+ const actor=await contentActor(db),bytes=format==='mp4'?videoFixture():await imageFixture(format),mime=format==='mp4'?'video/mp4':'image/'+format;
+ const view=await service.upload(actor.raw,{name:'validated.'+format,mime},mediaStream(bytes));
+ expect(view.mime).toBe(mime);expect(view.status).toBe('temporary');
+ const row=await db.selectFrom('media_assets').selectAll().where('id','=',view.id).executeTakeFirstOrThrow();
+ expect(row.sha256).toEqual(await import('node:crypto').then(m=>m.createHash('sha256').update(bytes).digest()));
+ const binary=await service.binary(actor.raw,view.id);try{expect(await binary.handle.readFile()).toEqual(bytes);}finally{await binary.handle.close();}
+ await service.remove(actor.raw,view.id);expect(await store.exists(row.storage_key)).toBe(false);
+});

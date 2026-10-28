@@ -427,3 +427,23 @@ object URLs, anonymous object access, signed browser URLs, authorization bypass,
 new storage alias, or provider enablement is introduced. Media is still delivered
 through the application's authorized proxy. No production DB provisioning or
 Owner bootstrap is part of this hotfix.
+
+### Safe private-storage upload diagnostics
+
+Storage failures emit one server-side `MEDIA_STORAGE_ERROR` line containing only
+operation, allowlisted SDK error name/code, HTTP status, recognized opaque request
+ID, fault/retry metadata and bounded attempt count. Unknown or unsafe metadata is
+reported as `Unavailable`; exception messages, stack traces, request headers,
+object keys/bytes, environment values and credentials are never included. The
+browser still receives the generic storage error. Share only this diagnostic line.
+
+The pinned SDK request is regression-tested without network traffic for the
+configured HTTPS endpoint/region, both bucket addressing modes, explicit byte
+length, SHA-256 checksum and create-only `If-None-Match: *`; no ACL is sent. These
+protections remain in place. A local serialization test is not proof that a real
+B2 request succeeded. Use a single small JPG after deployment to obtain the actual
+provider diagnostic before changing credentials or request options.
+
+Empty browser MIME hints use only supported filename extensions (legacy JPEG
+hints normalize to `image/jpeg`). The server's exact four MIME values, filename
+checks and mandatory binary parsing remain authoritative and unchanged.

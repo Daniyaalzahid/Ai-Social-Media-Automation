@@ -38,3 +38,15 @@ it.each(['dimensions','duration'])('rejects MP4 outside approved %s',async(kind)
 it('cleanup CLI rejects missing/wrong isolated configuration without leaking values',()=>{const canary='PUBLIC_CONFIG_CANARY_NOT_A_CREDENTIAL';const result=spawnSync(process.execPath,['--experimental-transform-types','scripts/media-cleanup.mjs','--environment=production'],{cwd:process.cwd(),env:{PATH:process.env.PATH,NODE_ENV:'test',APP_ENV:'test',TEST_DATABASE_URL:canary},encoding:'utf8'});expect(result.status).toBe(1);expect((result.stdout+result.stderr).includes(canary)).toBe(false);expect(result.stderr).toContain('Media cleanup unavailable');});
 
 it('reconciles a concurrently unlinked inode without masking unsafe existing files',async()=>{const key=randomBytes(32).toString('hex');await storage.write(key,mediaStream(await imageFixture()),1024);const original=storage.open.bind(storage);const boundary=vi.spyOn(storage,'open').mockImplementationOnce(async(value)=>{const handle=await original(value);try{await unlink(join(root,key+'.bin'));expect((await handle.stat()).nlink).toBe(0);}finally{await handle.close();}throw new MediaError(503,'Media unavailable.');});try{await expect(storage.delete(key)).resolves.toBeUndefined();}finally{boundary.mockRestore();}const unsafe=randomBytes(32).toString('hex');await symlink(join(root,'missing-target'),join(root,unsafe+'.bin'));await expect(storage.delete(unsafe)).rejects.toThrow();});
+
+it('normalizes empty browser MIME hints without relaxing the server upload schema',async()=>{
+ const {browserUploadMime}=await import('../../src/features/media/model');
+ for(const [name,mime] of [['photo.jpg','image/jpeg'],['photo.JPEG','image/jpeg'],['photo.png','image/png'],['photo.webp','image/webp'],['clip.mp4','video/mp4']]){
+  expect(browserUploadMime(name!, '')).toBe(mime);
+  expect(uploadSchema.safeParse({name,mime}).success).toBe(true);
+ }
+ for(const mime of ['image/jpg','image/pjpeg'])expect(browserUploadMime('photo.jpeg',mime)).toBe('image/jpeg');
+ for(const [name,mime] of [['evil.svg',''],['photo.jpg','image/png'],['photo.jpg','text/html'],['photo.jpg','application/octet-stream'],['a.php.jpg',''],['../photo.jpg',''],['photo.png','image/jpg']])expect(browserUploadMime(name!,mime!)).toBeNull();
+ expect(uploadSchema.safeParse({name:'photo.jpg',mime:''}).success).toBe(false);
+ expect(uploadSchema.safeParse({name:'photo.jpg',mime:'image/jpg'}).success).toBe(false);
+});
