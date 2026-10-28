@@ -1,9 +1,9 @@
 import { readFile, writeFile, mkdir, copyFile, realpath, mkdtemp, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { resolveCleanupNativeRuntime, cleanupNativeFailure } from './cleanup-native-runtime.mjs';
 import { cleanupPackagerDiagnostic } from './cleanup-packager-diagnostics.mjs';
 let ts,nft,stage='standalone-check',context={};
 const diagnosticModules=new Set(['typescript','next','kysely','mysql2','cardinal']);
@@ -52,6 +52,8 @@ try{
   if(importer&&inside(path.resolve(importer)))context.file=path.relative(root,importer);
   if(!message.startsWith('Failed to resolve dependency "cardinal":\n')||!message.endsWith(' loaded from '+path.join(root,'node_modules/mysql2/lib/helpers.js')))throw new Error('Incomplete cleanup dependency trace');
  }
+ stage='native-resolution';context={module:'argon2'};
+ const native=resolveCleanupNativeRuntime(root,trace.fileList);
  const hashes={};stage='dependency-copy';
  for(const relative of [...trace.fileList].sort()){
   const source=path.resolve(root,relative);context={file:relative};
@@ -65,18 +67,21 @@ try{
  }
  if(!hashes[entry]||!hashes['node_modules/kysely/package.json']||!hashes['node_modules/mysql2/package.json'])throw new Error('Required cleanup dependencies missing');
  stage='manifest';context={file:'scripts/media-cleanup.nft.json'};
- const manifest={version:1,files:Object.keys(hashes).map(file=>path.relative('scripts',file)),sha256:hashes};
+ const manifest={version:1,native,files:Object.keys(hashes).map(file=>path.relative('scripts',file)),sha256:hashes};
  await writeFile(path.join(output,'scripts/media-cleanup.nft.json'),JSON.stringify(manifest,null,2)+'\n');
  // Verify actual emitted files outside the checkout. Neither source node_modules,
  // NODE_PATH, NODE_OPTIONS nor build-time credentials can satisfy this execution.
  stage='isolated-verification';context={file:entry};
- isolated=await mkdtemp(path.join(tmpdir(),'bsa-cleanup-artifact-'));
+ // A sibling stays outside source module resolution, on the build filesystem.
+ // Hosting /tmp can be mounted noexec, which prevents dlopen even for valid ELF.
+ isolated=await mkdtemp(path.join(path.dirname(root),'.bsa-cleanup-artifact-'));
  for(const file of Object.keys(hashes)){
   const target=path.join(isolated,file);await mkdir(path.dirname(target),{recursive:true});await copyFile(path.join(output,file),target);
  }
  const check=spawnSync(process.execPath,[entry,'--environment=production'],{
   cwd:isolated,env:{NODE_ENV:'production',APP_ENV:'production'},encoding:'utf8',timeout:30000,
  });
+ Object.assign(context,cleanupNativeFailure(check.stderr,Object.keys(hashes)));
  context.childStatus=check.status;
  context.code=check.error?.code??/\b(ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|ERR_DLOPEN_FAILED|EACCES|EPERM|ETIMEDOUT)\b/.exec(check.stderr??'')?.[1];
  context.childName=/\b(TypeError|SyntaxError|ReferenceError|RangeError|Error):/.exec(check.stderr??'')?.[1];

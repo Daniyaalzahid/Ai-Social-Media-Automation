@@ -1,9 +1,9 @@
 // Build diagnostics intentionally project only fixed reasons and reviewed paths.
 // Never log an Error object, raw message/stack, process environment or child output.
-const stages=new Set(['standalone-check','compiler-load','nft-load','nft-trace','trace-warning-validation','dependency-copy','manifest','isolated-verification','cleanup-finalization']);
+const stages=new Set(['standalone-check','compiler-load','nft-load','nft-trace','trace-warning-validation','dependency-copy','native-resolution','manifest','isolated-verification','cleanup-finalization']);
 const names=new Set(['Error','TypeError','SyntaxError','RangeError','ReferenceError','AggregateError']);
 const codes=new Set(['ENOENT','EACCES','EPERM','EISDIR','ENOTDIR','ENOSPC','EMFILE','ETIMEDOUT','EAGAIN','ENOSYS','ERR_MODULE_NOT_FOUND','MODULE_NOT_FOUND','ERR_PACKAGE_PATH_NOT_EXPORTED','ERR_DLOPEN_FAILED']);
-const messages=new Set(['Cleanup compilation failed','Incomplete cleanup dependency trace','Unsafe cleanup trace path','Required cleanup dependencies missing','Cleanup artifact import/admission verification failed','Standalone output not found','Standalone output is ambiguous']);
+const messages=new Set(['Cleanup compilation failed','Incomplete cleanup dependency trace','Unsafe cleanup trace path','Required cleanup dependencies missing','Cleanup artifact import/admission verification failed','Cleanup native runtime resolution failed','Unsafe cleanup native runtime path','Standalone output not found','Standalone output is ambiguous']);
 function field(value,key){
  for(let depth=0;value&&typeof value==='object'&&depth<3;depth++,value=Object.getPrototypeOf(value)){
   const descriptor=Object.getOwnPropertyDescriptor(value,key);
@@ -29,6 +29,9 @@ export function cleanupPackagerDiagnostic(stage,error,context={}){
   if(codes.has(code))line.push(`code=${code}`);
   if(module)line.push(`module=${module}`);
   if(file)line.push(`file=${file}`);
+  if(typeof context.nativeFile==='string'&&/^node_modules\/argon2\/(?:prebuilds\/[a-z0-9_-]+\/[a-z0-9_.-]+|build\/(?:Release|Debug)\/[a-z0-9_.-]+)\.node$/.test(context.nativeFile))line.push(`native=${context.nativeFile}`);
+  if(['mapping-denied','truncated-binary','invalid-elf','architecture-mismatch','runtime-library-version','shared-library-unavailable','unresolved-symbol','node-abi-mismatch','native-load-failed'].includes(context.nativeReason))line.push(`loader=${context.nativeReason}`);
+  if(['libstdc++.so.6','libgcc_s.so.1','libc.so.6','libm.so.6'].includes(context.library))line.push(`library=${context.library}`);
   if(context.childName&&names.has(context.childName))line.push(`childName=${context.childName}`);
   if(Number.isInteger(context.childStatus))line.push(`childStatus=${context.childStatus}`);
   if(Array.isArray(context.diagnostics)&&context.diagnostics.every(value=>Number.isInteger(value)&&value>0&&value<100000))line.push(`diagnostics=${context.diagnostics.slice(0,8).join(',')}`);

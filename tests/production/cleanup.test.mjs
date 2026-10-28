@@ -1,18 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, copyFile, rm, rename, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, copyFile, rm, rename, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { ReadableStream } from 'node:stream/web';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn,spawnSync } from 'node:child_process';
 import { setTimeout, clearTimeout } from 'node:timers';
 import { sql } from 'kysely';
 import { createDatabase } from '../../src/server/db/connection.ts';
 import { resolveDatabaseConfiguration } from '../../src/server/db/config.ts';
 import { assertDestructiveTestDatabase } from '../../src/server/db/test-guard.ts';
 import { acquireDatabaseTestLease } from '../helpers/database-test-lease.ts';
+import { cleanupNativeFailure } from '../../scripts/cleanup-native-runtime.mjs';
+import { cleanupPackagerDiagnostic } from '../../scripts/cleanup-packager-diagnostics.mjs';
 import { LocalPrivateMediaStorage } from '../../src/server/media/storage.ts';
 
 const repository=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
@@ -23,6 +25,11 @@ async function artifact(){
  try{
   const manifest=JSON.parse(await readFile(path.join(built,'scripts/media-cleanup.nft.json'),'utf8'));
   assert.equal(manifest.version,1);assert(manifest.files.length>0);
+  assert.equal(manifest.native.length,1);
+  for(const native of manifest.native){
+   assert.equal(native.package,'argon2');assert.equal(native.platform,process.platform);assert.equal(native.arch,process.arch);
+   assert(manifest.sha256[native.file]);
+  }
   assert(manifest.sha256['node_modules/kysely/package.json']);assert(manifest.sha256['node_modules/mysql2/package.json']);
   for(const relative of manifest.files){
    const file=path.normalize(path.join('scripts',relative));
@@ -31,7 +38,7 @@ async function artifact(){
    const contents=await readFile(path.join(built,file));assert.equal(createHash('sha256').update(contents).digest('hex'),manifest.sha256[file]);
    const target=path.join(directory,file);await mkdir(path.dirname(target),{recursive:true});await copyFile(path.join(built,file),target);
   }
-  return {root,directory};
+  return {root,directory,native:manifest.native};
  }catch(error){await rm(root,{recursive:true,force:true});throw error;}
 }
 async function run(directory,env,argument='--environment=production'){
@@ -48,6 +55,28 @@ async function run(directory,env,argument='--environment=production'){
 test('isolated emitted cleanup graph loads with plain node and fails production admission safely',async()=>{
  const fixture=await artifact();
  try{
+  for(const native of fixture.native){
+   const loaded=spawnSync(process.execPath,['--input-type=commonjs','-e',"require(require('node:path').resolve(process.argv[1]));",native.file],{cwd:fixture.directory,env:{},encoding:'utf8'});
+   assert.equal(loaded.status,0,'Packaged native addon must dlopen without source dependencies');assert.equal(loaded.stderr,'');
+   const file=path.join(fixture.directory,native.file);await rename(file,file+'-missing');
+   try{
+    const missingNative=await run(fixture.directory,{APP_ENV:'production',NODE_ENV:'production'});
+    assert.equal(missingNative.code,1);assert.notEqual(missingNative.stderr.trim(),generic);
+    assert.match(missingNative.stderr,/No native build was found/);
+   }finally{await rename(file+'-missing',file);}
+   // Corrupt ONLY the isolated copy to prove native loading errors fail closed,
+   // and that the operator diagnostic identifies the addon without raw stderr.
+   await rename(file,file+'-original');
+   try{
+    await writeFile(file,'Synthetic truncated ELF fixture');
+    const broken=await run(fixture.directory,{APP_ENV:'production',NODE_ENV:'production'});
+    assert.equal(broken.code,1);assert.match(broken.stderr,/ERR_DLOPEN_FAILED/);
+    const context=cleanupNativeFailure(broken.stderr,[native.file]);
+    const line=cleanupPackagerDiagnostic('isolated-verification',new Error('Cleanup artifact import/admission verification failed'),{...context,code:'ERR_DLOPEN_FAILED'});
+    assert(line.includes('native='+native.file));assert.match(line,/loader=(truncated-binary|invalid-elf)/);
+    assert(!line.includes(fixture.root));assert(!line.includes('Synthetic'));
+   }finally{await rm(file,{force:true});await rename(file+'-original',file);}
+  }
   const result=await run(fixture.directory,{APP_ENV:'production',NODE_ENV:'production'});
   assert.equal(result.code,1);assert.equal(result.stdout,'');assert.equal(result.stderr.trim(),generic);
   // A missing packaged dependency must not be mistaken for safe admission failure.

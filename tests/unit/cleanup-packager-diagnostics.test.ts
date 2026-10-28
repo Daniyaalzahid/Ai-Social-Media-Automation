@@ -45,7 +45,7 @@ it.each(['standalone-check','compiler-load','nft-load','nft-trace','trace-warnin
  const put=async(file:string,text:string)=>{await mkdir(path.dirname(path.join(root,file)),{recursive:true});await writeFile(path.join(root,file),text);};
  try{
   await mkdir(path.join(root,'scripts'),{recursive:true});
-  for(const file of ['package-media-cleanup.mjs','cleanup-packager-diagnostics.mjs'])await copyFile(path.join('scripts',file),path.join(root,'scripts',file));
+  for(const file of ['package-media-cleanup.mjs','cleanup-packager-diagnostics.mjs','cleanup-native-runtime.mjs'])await copyFile(path.join('scripts',file),path.join(root,'scripts',file));
   if(stage!=='standalone-check')await put('.next/standalone/server.js','// Synthetic standalone fixture\n');
   if(!['standalone-check','compiler-load'].includes(stage)){
    await put('node_modules/typescript/package.json',JSON.stringify({type:'module',main:'index.js'}));
@@ -73,4 +73,13 @@ it.each(['standalone-check','compiler-load','nft-load','nft-trace','trace-warnin
   if(stage==='standalone-check')expect(result.stderr).toContain('code=ENOENT');
   if(stage==='isolated-verification')expect(result.stderr).toContain('childStatus=1');
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+it('projects reviewed native loader metadata and rejects arbitrary injected values',()=>{
+ const error=new Error('Cleanup artifact import/admission verification failed');
+ const line=cleanupPackagerDiagnostic('isolated-verification',error,{nativeFile:'node_modules/argon2/prebuilds/linux-x64/argon2.glibc.node',nativeReason:'mapping-denied',library:'libstdc++.so.6',code:'ERR_DLOPEN_FAILED'});
+ expect(line).toContain('native=node_modules/argon2/prebuilds/linux-x64/argon2.glibc.node');
+ expect(line).toContain('loader=mapping-denied');expect(line).toContain('library=libstdc++.so.6');
+ const secret='PUBLIC_NATIVE_SECRET_CANARY';
+ expect(cleanupPackagerDiagnostic('isolated-verification',error,{nativeFile:secret,nativeReason:secret,library:secret})).not.toContain(secret);
 });
