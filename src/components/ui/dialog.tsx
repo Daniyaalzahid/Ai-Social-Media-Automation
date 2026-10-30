@@ -19,7 +19,7 @@ export function Dialog({ open, onClose, title, description, children }: { open: 
   }, [open]);
   return <dialog ref={ref} className="dialog" aria-labelledby={`${id}-title`} aria-describedby={description ? `${id}-description` : undefined} onCancel={(event) => { event.preventDefault(); onClose(); }} onKeyDown={(event) => {
     if (event.key !== 'Tab') return;
-    const candidates = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('a[href], button, input, textarea, select, [tabindex]'));
+    const candidates = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('a[href], button, input, textarea, select, summary, [tabindex]'));
     const focusable = candidates.filter((element) => element.tabIndex >= 0 && !element.matches(':disabled') && element.getClientRects().length > 0);
     const first = focusable[0];
     const last = focusable.at(-1);

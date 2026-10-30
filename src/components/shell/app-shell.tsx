@@ -13,7 +13,9 @@ import { navigation, type NavigationItem } from './navigation';
 import { classes } from '../../lib/classes';
 
 function Navigation({ pathname, items, collapsed = false, onNavigate }: { items: readonly NavigationItem[]; pathname: string | null; collapsed?: boolean; onNavigate?: () => void }) {
-  return <nav aria-label="Main navigation" className="main-nav">{items.map((item) => <Link key={item.href} href={item.href} className={classes('nav-link', pathname === item.href && 'nav-link--active', item.href === '/connections' && 'nav-link--group')} aria-current={pathname === item.href ? 'page' : undefined} aria-label={collapsed ? item.label : undefined} title={collapsed ? item.label : undefined} {...(onNavigate ? { onClick: onNavigate } : {})}><Icon name={item.icon} />{!collapsed && <span>{item.label}</span>}{!collapsed && pathname === item.href && <span className="nav-dot" aria-hidden="true" />}</Link>)}</nav>;
+  const primary=items.filter(item=>['/overview','/create-post','/content','/connections'].includes(item.href)),more=items.filter(item=>!primary.includes(item));
+  function links(group:readonly NavigationItem[]){return <>{group.map((item) => <Link key={item.href} href={item.href} className={classes('nav-link', pathname === item.href && 'nav-link--active', item.href === '/create-post' && 'nav-link--compose')} aria-current={pathname === item.href ? 'page' : undefined} aria-label={collapsed ? item.label : undefined} title={collapsed ? item.label : undefined} {...(onNavigate ? { onClick: onNavigate } : {})}><Icon name={item.icon} />{!collapsed && <span>{item.label}</span>}{!collapsed && pathname === item.href && <span className="nav-dot" aria-hidden="true" />}</Link>)}</>;}
+  return <nav aria-label="Main navigation" className="main-nav">{links(primary)}{more.length>0&&<details className="nav-more" open={collapsed||more.some(item=>item.href===pathname)}><summary aria-label={collapsed?'More workspace tools':undefined}>More</summary>{links(more)}</details>}</nav>;
 }
 
 export function AppShell({ children, items = navigation, showDesignSystem = true }: { children: ReactNode; items?: readonly NavigationItem[]; showDesignSystem?: boolean }) {

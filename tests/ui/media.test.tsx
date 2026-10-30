@@ -7,7 +7,7 @@ it('labels upload controls and communicates expiry/empty state accessibly',()=>{
 it('renders permitted filenames as text with conditional removal controls',()=>{render(<TemporaryMedia initial={[{id:'00000000-0000-4000-8000-000000000001',name:'<script>.png',kind:'image',mime:'image/png',bytes:10,width:1,height:1,duration:null,status:'temporary',expiresAt:'2026-10-18T00:00:00Z',createdAt:'2026-10-17T00:00:00Z',canRemove:false}]}/>);expect(screen.getByRole('heading',{name:'<script>.png'})).toBeInTheDocument();expect(document.querySelector('script')).toBeNull();expect(screen.queryByRole('button',{name:'Remove file'})).toBeNull();});
 
 it('uploads a browser-selected JPEG with an empty MIME hint using the existing secure request',async()=>{
- const fetch=vi.fn().mockResolvedValueOnce({json:async()=>({csrf:'x'.repeat(43)})}).mockResolvedValueOnce({ok:true,json:async()=>({ok:true})}).mockResolvedValueOnce({json:async()=>({ok:true,media:[]})});
+ const fetch=vi.fn().mockResolvedValueOnce({json:async()=>({csrf:'x'.repeat(43)})}).mockResolvedValueOnce({ok:true,json:async()=>({ok:true,media:{id:'00000000-0000-4000-8000-000000000001',name:'normal.JPG',kind:'image',mime:'image/jpeg',bytes:4,width:1,height:1,duration:null,status:'temporary',expiresAt:'2026-11-01',createdAt:'2026-10-30',canRemove:true}})}).mockResolvedValueOnce({json:async()=>({ok:true,media:[]})});
  vi.stubGlobal('fetch',fetch);render(<TemporaryMedia initial={[]}/>);
  const file=new File([new Uint8Array([255,216,255,217])],'normal.JPG',{type:''});
  fireEvent.change(screen.getByLabelText('Choose a temporary image or video'),{target:{files:[file]}});

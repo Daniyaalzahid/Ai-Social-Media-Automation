@@ -11,11 +11,14 @@ import { StatusPage } from '../../src/components/status-page';
 vi.mock('next/navigation', () => ({ usePathname: () => '/overview' }));
 
 describe('workspace shell and presentation pages', () => {
-  it('includes the exact PRD navigation and marks the current route', () => {
+  it('keeps all destinations, groups advanced tools and marks the current route', async () => {
     render(<AppShell><h1>Overview preview</h1></AppShell>);
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
+    expect(nav.querySelectorAll(':scope > a')).toHaveLength(4);
+    expect(nav.querySelector('details')).not.toHaveAttribute('open');
+    await userEvent.click(within(nav).getByText('More'));
     expect(within(nav).getAllByRole('link')).toHaveLength(12);
-    expect(navigation.map((item) => item.label)).toEqual(['Overview', 'Create Post', 'Calendar', 'Content', 'Media', 'Approvals', 'Analytics', 'Connections', 'Brand Brain', 'Team', 'Activity', 'Settings']);
+    expect(navigation.map((item) => item.label)).toEqual(['Overview', 'Create Post', 'Calendar', 'Posts', 'Media', 'Approvals', 'Analytics', 'Connections', 'Brand Brain', 'Team', 'Activity', 'Settings']);
     expect(within(nav).getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main-content');
     expect(screen.getByRole('searchbox', { name: 'Search workspace' })).toBeDisabled();
@@ -36,6 +39,9 @@ describe('workspace shell and presentation pages', () => {
     await user.click(screen.getByRole('button', { name: 'Open navigation' }));
     const dialog = screen.getByRole('dialog', { name: 'Bismillah Social AI' });
     expect(within(dialog).getAllByRole('link')).toHaveLength(13);
+    expect(dialog.querySelector('details')).not.toHaveAttribute('open');
+    await user.click(within(dialog).getByText('More'));
+    expect(within(dialog).getAllByRole('link')).toHaveLength(13);
     await user.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -49,14 +55,16 @@ describe('workspace shell and presentation pages', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).not.toBeDisabled();
     expect(screen.getByRole('link', { name: /Back to home/ })).toHaveAttribute('href', '/');
   });
-  it('clearly labels mock metrics and does not claim live integrations', () => {
-    render(<Overview />);
-    for (const title of ['Scheduled today', 'Awaiting approval', 'Published', 'Needs attention', 'Upcoming posts', 'Recent activity']) {
-      expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
-    }
-    expect(screen.getByText(/All activity and numbers below are illustrative/)).toBeInTheDocument();
-    expect(screen.getAllByText('Not connected')).toHaveLength(5);
-    expect(screen.getByRole('progressbar')).toHaveAttribute('max', '50');
+  it('shows scoped real post counts without invented activity or scheduled delivery', () => {
+    render(<Overview posts={{items:[],cursor:null}} />);
+    for(const title of ['Published','Drafts','Failed','Awaiting review','Recent Posts'])expect(screen.getByRole('heading',{name:title})).toBeInTheDocument();
+    expect(screen.getByText(/Scheduling is not available/)).toBeInTheDocument();
+    expect(screen.getByRole('link',{name:'Create Post'})).toHaveAttribute('href','/create-post');
+    expect(screen.queryByText(/illustrative/)).not.toBeInTheDocument();
+  });
+  it('does not present withheld publishing metrics as zero',()=>{
+    render(<Overview canSeePublishing={false} posts={{items:[],cursor:null}}/>);
+    expect(screen.getAllByText('—')).toHaveLength(2);
   });
   it.each(['403', '404', '500', 'OFFLINE'])('renders the %s error state with a recovery link', (code) => {
     render(<StatusPage code={code} title="Safe error" description="A sanitized description." />);

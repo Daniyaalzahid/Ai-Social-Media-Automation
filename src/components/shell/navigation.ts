@@ -5,7 +5,7 @@ export const navigation: readonly NavigationItem[] = [
   { label: 'Overview', href: '/overview', icon: 'overview', description: 'Your content operation at a glance.' },
   { label: 'Create Post', href: '/create-post', icon: 'plus', description: 'A space for your next good idea.' },
   { label: 'Calendar', href: '/calendar', icon: 'calendar', description: 'Make room for a consistent brand presence.' },
-  { label: 'Content', href: '/content', icon: 'content', description: 'Every idea, draft, and platform variation.' },
+  { label: 'Posts', href: '/content', icon: 'content', description: 'Every idea, draft, and platform variation.' },
   { label: 'Media', href: '/media', icon: 'media', description: 'A home for your campaign visuals.' },
   { label: 'Approvals', href: '/approvals', icon: 'check', description: 'A thoughtful second look before the world sees it.' },
   { label: 'Analytics', href: '/analytics', icon: 'analytics', description: 'Understand your content operation.' },

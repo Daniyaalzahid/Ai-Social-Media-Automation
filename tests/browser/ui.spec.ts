@@ -19,11 +19,12 @@ test('desktop shell, collapse, routes, and functional sign-in form', async ({ pa
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/overview');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Content overview');
-  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link')).toHaveCount(12);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Overview');
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link')).toHaveCount(4);
   await test.step('Collapse hydrated sidebar', async () => { await page.getByRole('button', { name: 'Collapse sidebar' }).click(); });
   await expect(page.getByRole('link', { name: 'Brand Brain', exact: true })).toBeVisible();
   await test.step('Expand hydrated sidebar', async () => { await page.getByRole('button', { name: 'Expand sidebar' }).click(); });
+  await page.getByRole('navigation',{name:'Main navigation'}).getByText('More',{exact:true}).click();
   await test.step('Navigate to protected calendar', async () => { await page.getByRole('link', { name: 'Calendar', exact: true }).click(); });
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Calendar');
   await expect(page.locator('#main-content')).toBeFocused();
@@ -51,6 +52,7 @@ test('mobile drawer traps focus, closes on Escape, restores focus, and navigates
   await expect(dialog).not.toBeVisible();
   await expect(trigger).toBeFocused();
   await trigger.click();
+  await dialog.getByText('More',{exact:true}).click();
   await dialog.getByRole('link', { name: 'Brand Brain', exact: true }).click();
   await expect(dialog).not.toBeVisible();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Brand Brain');
@@ -77,8 +79,8 @@ test('all navigation placeholders and error previews render without live service
     await expect(page.getByText('UI placeholder')).toBeVisible();
   }
   await page.goto('/connections'); await expect(page.getByRole('heading',{name:'Connections',exact:true})).toBeVisible();
-  await page.goto('/create-post'); await expect(page.getByRole('heading',{name:'Generate platform drafts',exact:true})).toBeVisible();
-  await page.goto('/content'); await expect(page.getByRole('heading',{name:'Content workspace',exact:true})).toBeVisible();
+  await page.goto('/create-post'); await expect(page.getByRole('heading',{name:'Create Post',exact:true})).toBeVisible();await expect(page.getByLabel('Caption',{exact:true})).toBeVisible();
+  await page.goto('/content'); await expect(page.getByRole('heading',{name:'Posts',exact:true})).toBeVisible();
   await page.goto('/approvals'); await expect(page.getByRole('heading',{name:'Review queue',exact:true})).toBeVisible();
   await page.goto('/media'); await expect(page.getByRole('heading',{name:'Temporary media',exact:true})).toBeVisible();
   await page.goto('/brand-brain'); await expect(page.getByRole('heading', { name: 'Brand Brain', exact: true })).toBeVisible();
@@ -113,7 +115,7 @@ test('dashboard primary action and drawer controls stay usable at review widths'
   for (const width of [320, 375, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto('/overview');
-    const primary = page.getByRole('link', { name: 'Create a post', exact: true });
+    const primary = page.locator('main').getByRole('link', { name: 'Create Post', exact: true });
     await expect(primary).toBeVisible();
     await expect(primary).toHaveClass(/button--primary/);
     await expect(page.locator('main a.button--primary')).toHaveCount(1);

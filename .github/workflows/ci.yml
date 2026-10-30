@@ -55,6 +55,7 @@ jobs:
           task_tools="$RUNNER_TEMP/bismillah-tools"
           if [ -w /workspace ]; then task_tools=/workspace/.tools; fi
           node --env-file="$task_tools/phase2a-mysql/browser.env" node_modules/@playwright/test/cli.js test
+          node --env-file="$task_tools/phase2a-mysql/browser.env" node_modules/@playwright/test/cli.js test --config=playwright.composer.config.ts --retries=0
       - name: Stop disposable browser database
         if: always()
         run: python3 scripts/local-mysql.py stop

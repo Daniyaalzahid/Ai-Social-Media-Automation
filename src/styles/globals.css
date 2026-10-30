@@ -552,3 +552,40 @@ input[type=file]::file-selector-button { border: 0; border-radius: 7px; padding:
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .button:hover:not(:disabled), .button:active:not(:disabled), .icon-button:hover:not(:disabled) svg, .text-link:hover svg { transform: none; }
 }
+
+/* A single focused publishing workspace, using the existing Bismillah tokens. */
+.simple-composer { max-width: 900px; margin-inline: auto; }
+.simple-composer-fields { border: 0; padding: 0; margin: 0; min-inline-size: 0; }
+.simple-section { background: var(--surface); border: var(--border); border-radius: var(--radius-card); padding: clamp(18px,3vw,32px); margin-block-end: 16px; min-width: 0; }
+.simple-section > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
+.simple-section h2 { font-size: 1.2rem; margin-block: 6px 0; }
+.composer-channel-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,145px),1fr)); gap: 10px; }
+.composer-channel { border: var(--border); border-radius: 12px; padding: 14px; display: grid; align-content: start; gap: 8px; font-size: .875rem; overflow-wrap: anywhere; }
+.composer-channel:has(input:checked) { background: var(--brand-soft); border-color: var(--brand-primary); }
+.composer-channel label { display: grid; grid-template-columns: auto 1fr; gap: 6px; align-items: center; }
+.composer-channel small { grid-column: 2; color: var(--muted); }
+.composer-channel > span,.field-help { color: var(--muted); font-size: .85rem; line-height: 1.6; }
+.composer-channel a { color: var(--brand-primary); }
+.simple-section .upload-card { border: 0; padding: 0; box-shadow: none; }
+.composer-media-preview { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-top: 20px; overflow-wrap: anywhere; }
+.composer-media-preview img,.composer-media-preview video { width: min(100%,260px); max-height: 280px; object-fit: contain; border-radius: 12px; background: var(--surface-soft); }
+#master-caption { min-height: 180px; font-size: 1rem; margin-top: 8px; }
+.composer-ai { display: grid; gap: 8px; margin-block: 20px; }
+.composer-ai .button { justify-self: start; }
+.composer-ai p { margin: 0; color: var(--muted); font-size: .875rem; }
+.composer-details { padding-block: 16px; border-top: var(--border); }
+.composer-details summary { cursor: pointer; font-weight: 600; min-height: 28px; }
+.composer-details[open] summary { margin-bottom: 20px; }
+.composer-details .field { margin-block: 18px; }
+.composer-fact { display: flex; gap: 12px; flex-wrap: wrap; margin-block: 16px; }
+.composer-fact > label { flex: 1 1 180px; }
+.simple-composer-actions { display: flex; gap: 10px; flex-wrap: wrap; padding-block: 16px; }
+.composer-feedback { overflow-wrap: anywhere; }
+.composer-results article { background: var(--surface); border-radius: 12px; padding: 18px; margin-block: 10px; overflow-wrap: anywhere; }
+.schedule-unavailable { display: grid; gap: 12px; background: var(--surface-soft); padding: 20px; border-radius: 12px; }
+.nav-more summary { padding: 12px 16px; cursor: pointer; font-size: .85rem; color: var(--muted); }
+.nav-more .nav-link { margin-block: 3px; }
+.nav-link--compose { background: var(--brand-soft); color: var(--brand-primary); font-weight: 700; }
+@media(max-width:600px) { .simple-composer-actions .button { flex: 1 1 120px; } .composer-media-preview > div { min-width: 0; width: 100%; } }
+.post-thumbnail { width: 100px; max-height: 100px; object-fit: contain; border-radius: 10px; }
+.post-caption-excerpt { max-width: 65ch; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; white-space: pre-wrap; }

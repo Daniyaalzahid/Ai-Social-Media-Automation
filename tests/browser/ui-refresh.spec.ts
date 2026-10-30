@@ -30,15 +30,12 @@ for (const width of [375, 1440]) {
         if (route === 'create-post') {
           category = 'composer-keyboard';
           const composer = page.getByRole('form', { name: 'Content composer' });
-          const instagram = composer.getByRole('checkbox', { name: 'INSTAGRAM' });
-          await instagram.focus();
-          await expect(instagram).toBeFocused();
-          await page.keyboard.press('Space');
-          await expect(instagram).toBeChecked();
-          await expect(composer.getByLabel('INSTAGRAM caption', { exact: true })).toBeVisible();
-          await page.keyboard.press('Space');
-          await expect(instagram).not.toBeChecked();
-          await expect(composer.getByLabel('FACEBOOK caption', { exact: true })).toBeVisible();
+          const caption=composer.getByLabel('Caption',{exact:true});await caption.focus();await expect(caption).toBeFocused();
+          await expect(composer.getByRole('button',{name:'Post Now',exact:true})).toBeDisabled();
+          await expect(composer.getByText('Not connected',{exact:true})).toHaveCount(5);
+          await composer.getByText('Customize for each channel',{exact:true}).click();
+          await expect(composer.getByLabel('Instagram caption',{exact:true})).toBeVisible();
+          await expect(composer.getByLabel('Facebook caption',{exact:true})).toBeVisible();
           category = 'native-groups';
           expect(await composer.locator('fieldset').evaluateAll(elements => elements.every(element => getComputedStyle(element).borderStyle !== 'groove'))).toBe(true);
           category = 'reduced-motion';

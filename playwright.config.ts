@@ -6,6 +6,7 @@ process.env.PLAYWRIGHT_NO_COPY_PROMPT = '1';
 
 export default defineConfig({
   testDir: './tests/browser',
+  testIgnore: 'simple-composer.spec.ts',
   globalSetup: './tests/browser/setup.ts',
   fullyParallel: false,
   workers: 1,

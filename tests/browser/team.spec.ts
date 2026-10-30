@@ -48,6 +48,7 @@ for (const role of ['OWNER','MARKETING_ADMIN','CONTENT_CREATOR','REVIEWER','VIEW
   const direct = await page.goto('/team'); expect(direct?.status()).toBe(role === 'OWNER' ? 200 : 403);
   if (role !== 'OWNER') await expect(page.getByRole('heading', { name: 'Access denied' })).toBeVisible();
   await page.goto('/overview');
+  const more=page.getByRole('navigation',{name:'Main navigation'}).getByText('More',{exact:true});if(await more.count())await more.click();
   const visible = await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link').evaluateAll((links) => links.map((link) => new URL((link as HTMLAnchorElement).href).pathname).sort());
   expect(visible).toEqual(allowed[role]!.filter((path) => path !== 'ui-kit').map((path) => `/${path}`).sort());
   await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Team', exact: true })).toHaveCount(role === 'OWNER' ? 1 : 0);
